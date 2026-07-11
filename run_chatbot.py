@@ -26,7 +26,7 @@ RetrieverType = Literal["neo4j", "qdrant"]
 MAX_RETRIES = 1
 
 # 보조 판단 모델: 참조 필요 여부 판단 / 소스 선택 / 검색 결과 채점 / 검색어 재작성
-MODEL_NAME = "gpt-4o"
+MODEL_NAME = "gpt-4o-mini"
 
 REWRITE_PROMPT = """당신은 법률·규정 검색용 질문을 재작성하는 도우미입니다.
 사용자의 현재 질문이 이전 대화에 의존하는 경우, 이전 대화를 참고해서 현재 질문을
