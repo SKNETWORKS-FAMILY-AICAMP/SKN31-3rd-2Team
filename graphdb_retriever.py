@@ -77,7 +77,7 @@ class Neo4jRetriever:
             return [dict(r) for r in results]
 
     def retrieve(self, user_query: str, top_k: int = 3) -> list[dict]:
-        """참조 문서(조문) 목록을 반환. text-to-Cypher 우선, 실패 시 벡터 검색으로 폴백."""
+        """참조 문서(조문) 목록을 반환. text-to-Cypher 우선, 실패하거나 결과가 없으면 벡터 검색으로 폴백."""
         cypher = self._generate_cypher(user_query)
 
         if not self._is_safe_cypher(cypher):
@@ -92,6 +92,12 @@ class Neo4jRetriever:
         try:
             with self.driver.session(database=self.database) as session:
                 results = session.run(cypher, **params)
-                return [dict(r) for r in results]
+                rows = [dict(r) for r in results]
         except Exception:
             return self._vector_fallback(user_query, top_k)
+
+        # 핵심 수정: 쿼리는 성공했지만 결과가 0건이면 벡터 검색으로 폴백
+        if not rows:
+            return self._vector_fallback(user_query, top_k)
+
+        return rows
