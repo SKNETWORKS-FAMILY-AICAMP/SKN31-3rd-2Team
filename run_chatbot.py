@@ -1,5 +1,5 @@
 import os
-from typing import TypedDict, List, Dict, Any, Literal, Optional
+from typing import TypedDict, List, Dict, Any, Literal
 
 from openai import OpenAI
 from neo4j import GraphDatabase
@@ -12,7 +12,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import Annotated
 from langgraph.graph.message import add_messages
 
-from graphdb_retriever import Neo4jRetriever, CHAT_MODEL
+from graphdb_retriever import Neo4jRetriever
 from vectordb_retriever import QdrantRetriever
 
 load_dotenv()
@@ -21,6 +21,12 @@ TARGET_DATABASE = "lawdb"
 QDRANT_COLLECTION = "GUIDANCE"
 
 RetrieverType = Literal["neo4j", "qdrant"]
+
+# 자기 평가 후 재검색: 최대 1번
+MAX_RETRIES = 1
+
+# 보조 판단 모델: 참조 필요 여부 판단 / 소스 선택 / 검색 결과 채점 / 검색어 재작성
+MODEL_NAME = "gpt-4o"
 
 REWRITE_PROMPT = """당신은 법률·규정 검색용 질문을 재작성하는 도우미입니다.
 사용자의 현재 질문이 이전 대화에 의존하는 경우, 이전 대화를 참고해서 현재 질문을
@@ -32,6 +38,50 @@ REWRITE_PROMPT = """당신은 법률·규정 검색용 질문을 재작성하는
 3. 현재 질문이 이미 명확하면 그대로 출력하세요.
 4. 이전 대화에 없는 내용을 임의로 추가하지 마세요.
 5. 한 문장으로 작성하세요."""
+
+# 참조 문서 검색이 필요한 질문인지 분기하기 위한 분류 프롬프트
+ROUTE_PROMPT = """당신은 사용자 질문이 '군 법률·규정 참조 문서 검색'이 필요한지 판단하는 분류기입니다.
+
+- 군대 법률·규정·훈령·권리·의무·처벌·휴가·징계·복무 등 규정 근거가 필요한 질문 → "yes"
+- 단순 인사, 잡담, 챗봇(박병장) 자기소개, 규정과 무관한 일반 대화 → "no"
+
+반드시 "yes" 또는 "no" 한 단어만 출력하세요."""
+
+# 어떤 검색 소스(Neo4j/Qdrant)를 쓸지 결정하는 라우터 프롬프트
+SOURCE_PROMPT = """당신은 사용자 질문을 어떤 검색 소스로 보낼지 결정하는 라우터입니다.
+두 소스는 담고 있는 내용의 성격이 다릅니다.
+
+- "neo4j": 법령 조문이 구조화되어 저장된 그래프 DB.
+  특정 법령·조문 번호, 법적 근거, 권리·의무·처벌 규정을 정확히 인용해야 하는 질문에 강함.
+- "qdrant": PDF 원문(본문·표·이미지)이 저장된 벡터 DB.
+  훈령의 세부 절차, 서식·표·수치, 원문 맥락이 필요한 질문에 강함.
+
+규칙:
+- 조문·법적 근거 중심 질문 → "neo4j"
+- PDF 원문·표·서식·절차 세부 중심 질문 → "qdrant"
+- 애매하면 "neo4j"를 선택하세요.
+
+반드시 "neo4j" 또는 "qdrant" 한 단어만 출력하세요."""
+
+# 검색 결과가 질문에 답하기 충분한지 스스로 평가하는 채점 프롬프트
+GRADE_PROMPT = """당신은 검색된 참조 문서가 사용자 질문에 답하기에 충분한지 평가하는 채점기입니다.
+
+기준:
+- 문서가 질문의 핵심을 다루고 답변 근거로 쓸 수 있으면 → "yes"
+- 문서가 질문과 관련이 없거나 근거로 삼기에 부족하면 → "no"
+
+반드시 "yes" 또는 "no" 한 단어만 출력하세요."""
+
+# 채점에서 부족('no') 판정이 나왔을 때, 재검색을 위한 검색어 개선 프롬프트
+REFINE_PROMPT = """당신은 검색 결과가 부족했을 때 검색용 질문을 개선하는 도우미입니다.
+이전 검색 질문으로는 관련 문서를 충분히 찾지 못했습니다.
+같은 의미를 유지하되, 법령·규정 문서에서 더 잘 검색되도록 핵심 법률 용어나 키워드를
+넣어 다른 표현으로 검색용 질문을 다시 작성하세요.
+
+규칙:
+1. 답변하지 말고 검색용 질문만 한 문장으로 출력하세요.
+2. 원래 질문의 의도를 바꾸지 마세요.
+3. 이전과 똑같은 문장을 반복하지 마세요."""
 
 GENERATE_PROMPT = (
     "당신은 군 생활의 모든 법률, 규정, 꼼수까지 마스터한 만렙 에이스 선임 '박병장'입니다. "
@@ -58,23 +108,32 @@ class ChatBotState(TypedDict, total=False):
     user_query: str
     search_query: str
     top_k: int
+    needs_reference: bool            
+    source: RetrieverType           
     search_data: List[Dict[str, Any]]
     context_text: str
+    is_relevant: bool             
+    retry_count: int               
     answer: str
     messages: Annotated[List[BaseMessage], add_messages]
 
 
 class LangGraphChatbot:
-    """retriever_type("neo4j" 또는 "qdrant")에 맞는 retriever를 받아서 동작하는 챗봇.
+    """Neo4j·Qdrant 두 retriever를 모두 받아, 질문마다 알맞은 소스를 '자동으로' 골라 동작하는 챗봇.
     두 retriever 모두 retrieve(user_query, top_k) 인터페이스가 동일하므로,
-    검색 자체는 공통 코드로 처리하고 payload 구조가 다른 부분(context 조립)만 분기한다."""
+    검색 자체는 공통 코드로 처리하고 payload 구조가 다른 부분(context 조립)만 소스별로 분기한다.
+    """
 
-    def __init__(self, client: OpenAI, retriever, retriever_type: RetrieverType):
+    def __init__(self, client: OpenAI, retrievers: Dict[RetrieverType, Any], verbose: bool = True):
         self.client = client
-        self.retriever = retriever
-        self.retriever_type = retriever_type
+        self.retrievers = retrievers
+        self.verbose = verbose
         self.checkpointer = InMemorySaver()
         self.workflow = self._build_graph()
+
+    def _log(self, message: str) -> None:
+        if self.verbose:
+            print(message)
 
     # ---------- helpers ----------
     def _build_context_neo4j(self, search_data: List[Dict[str, Any]]) -> str:
@@ -115,8 +174,8 @@ class LangGraphChatbot:
             blocks.append(block)
         return "\n\n---\n\n".join(blocks)
 
-    def _build_context(self, search_data: List[Dict[str, Any]]) -> str:
-        if self.retriever_type == "qdrant":
+    def _build_context(self, source: RetrieverType, search_data: List[Dict[str, Any]]) -> str:
+        if source == "qdrant":
             return self._build_context_qdrant(search_data)
         return self._build_context_neo4j(search_data)
 
@@ -127,15 +186,35 @@ class LangGraphChatbot:
             for m in messages if type(m) in role_map
         ]
 
-    def _chat(self, system_prompt: str, history: List[Dict[str, str]], user_content: str) -> str:
+    def _chat(self, system_prompt: str, history: List[Dict[str, str]],
+              user_content: str, model: str = MODEL_NAME) -> str:
+        """model 인자를 추가해서, 보조 판단(분류/채점/재작성)에는 MODEL_NAME을 넘김."""
         messages = [{"role": "system", "content": system_prompt}, *history,
                     {"role": "user", "content": user_content}]
         response = self.client.chat.completions.create(
-            model=CHAT_MODEL, temperature=0, messages=messages
+            model=model, temperature=0, messages=messages
         )
         return (response.choices[0].message.content or "").strip()
 
     # ---------- nodes ----------
+    def check_reference_node(self, state: ChatBotState) -> Dict[str, Any]:
+        """이 질문이 규정 참조 검색이 필요한 질문인지 판단해서 needs_reference에 저장."""
+        verdict = self._chat(
+            ROUTE_PROMPT, [], f"질문: {state['user_query']}", model=MODEL_NAME
+        )
+        needs_reference = verdict.strip().lower().startswith("yes")
+        self._log(f"[참조 필요 여부] {'예' if needs_reference else '아니오'}")
+        return {"needs_reference": needs_reference}
+
+    def route_source_node(self, state: ChatBotState) -> Dict[str, Any]:
+        """질문 성격을 보고 Neo4j / Qdrant 중 처음 시도할 소스를 자동으로 고른다."""
+        verdict = self._chat(
+            SOURCE_PROMPT, [], f"질문: {state['user_query']}", model=MODEL_NAME
+        )
+        source: RetrieverType = "qdrant" if verdict.strip().lower().startswith("qdrant") else "neo4j"
+        self._log(f"[소스 선택] {source}")
+        return {"source": source}
+
     def rewrite_node(self, state: ChatBotState) -> Dict[str, Any]:
         user_query = state["user_query"]
         previous_messages = state.get("messages", [])[:-1]
@@ -151,41 +230,123 @@ class LangGraphChatbot:
         return {"search_query": search_query or user_query}
 
     def retrieve_node(self, state: ChatBotState) -> Dict[str, Any]:
+        source: RetrieverType = state.get("source", "neo4j")
+        retriever = self.retrievers[source]
+
         search_query = state.get("search_query", state["user_query"])
         top_k = state.get("top_k", 3)
-        search_data = self.retriever.retrieve(user_query=search_query, top_k=top_k)
+        search_data = retriever.retrieve(user_query=search_query, top_k=top_k)
 
-        source_name = "Qdrant" if self.retriever_type == "qdrant" else "Neo4j"
+        source_name = "Qdrant" if source == "qdrant" else "Neo4j"
         context_text = (
-            self._build_context(search_data) if search_data
+            self._build_context(source, search_data) if search_data
             else f"현재 질문과 관련된 참조 문서를 {source_name}에서 찾지 못했습니다."
         )
         return {"search_data": search_data, "context_text": context_text}
+
+    def grade_node(self, state: ChatBotState) -> Dict[str, Any]:
+        """검색 결과가 질문에 답하기 충분한지 스스로 평가. 검색 결과가 아예 없으면 LLM 호출 없이 바로 '부족'으로 처리"""
+        search_data = state.get("search_data", [])
+        if not search_data:
+            self._log("[채점] 검색 결과 없음 → 부족")
+            return {"is_relevant": False}
+
+        verdict = self._chat(
+            GRADE_PROMPT, [],
+            f"[사용자 질문]\n{state['user_query']}\n\n[검색된 문서]\n{state.get('context_text', '')}",
+            model=MODEL_NAME,
+        )
+        is_relevant = verdict.strip().lower().startswith("yes")
+        self._log(f"[채점] {'충분' if is_relevant else '부족'}")
+        return {"is_relevant": is_relevant}
+
+    def refine_node(self, state: ChatBotState) -> Dict[str, Any]:
+        """채점 결과가 '부족'일 때: 검색어를 개선하고, 소스를 반대쪽으로 전환해 다른 DB도 시도.
+        (Neo4j와 Qdrant는 담긴 내용이 다르므로, 한 번의 재검색을 다른 소스에 쓰는 게 효과적이다.)"""
+        retry_count = state.get("retry_count", 0) + 1
+        current: RetrieverType = state.get("source", "neo4j")
+        switched: RetrieverType = "qdrant" if current == "neo4j" else "neo4j"
+
+        new_query = self._chat(
+            REFINE_PROMPT, [],
+            f"원래 질문: {state['user_query']}\n이전 검색 질문: {state.get('search_query', '')}",
+            model=MODEL_NAME,
+        )
+        self._log(f"[재검색 {retry_count}/{MAX_RETRIES}] 소스 {current} → {switched}, 검색어 재작성")
+        return {
+            "source": switched,
+            "search_query": new_query or state.get("search_query", state["user_query"]),
+            "retry_count": retry_count,
+        }
 
     def generate_node(self, state: ChatBotState) -> Dict[str, Any]:
         previous_messages = state.get("messages", [])[:-1]
         history = self._to_openai_messages(previous_messages)
 
-        current_prompt = (
-            f"[검색에 사용한 질문]\n{state.get('search_query', state['user_query'])}\n\n"
-            f"[참조 문서]\n{state['context_text']}\n\n"
-            f"[사용자의 현재 질문]\n{state['user_query']}"
-        )
+        if state.get("needs_reference"):
+            # 참조가 필요한 질문: 검색된 문서를 근거로 답변
+            current_prompt = (
+                f"[검색에 사용한 질문]\n{state.get('search_query', state['user_query'])}\n\n"
+                f"[참조 문서]\n{state.get('context_text', '')}\n\n"
+                f"[사용자의 현재 질문]\n{state['user_query']}"
+            )
+        else:
+            # 참조가 필요 없는 질문(인사·잡담 등): 박병장 캐릭터로만 답변, 근거 줄 생략
+            current_prompt = (
+                f"[사용자의 현재 질문]\n{state['user_query']}\n\n"
+                "이 질문은 규정 참조가 필요 없는 일반 대화입니다. "
+                "박병장 캐릭터로 자연스럽게 답하되, 규정 근거([근거: ...]) 줄은 붙이지 마세요."
+            )
 
         answer = self._chat(GENERATE_PROMPT, history, current_prompt) or "답변을 생성하지 못했습니다."
-
         return {"answer": answer, "messages": [AIMessage(content=answer)]}
+
+    # ---------- routers ----------
+    def route_after_check(self, state: ChatBotState) -> Literal["route_source", "generate"]:
+        """참조가 필요하면 소스 라우팅(route_source)으로, 아니면 바로 답변 생성으로."""
+        return "route_source" if state.get("needs_reference") else "generate"
+
+    def route_after_grade(self, state: ChatBotState) -> Literal["generate", "refine"]:
+        """검색 결과가 충분하거나 재검색 한도를 다 쓰면 답변 생성, 아니면 검색어를 개선해 다시 검색"""
+        if state.get("is_relevant"):
+            return "generate"
+        if state.get("retry_count", 0) >= MAX_RETRIES:
+            return "generate"
+        return "refine"
 
     # ---------- graph ----------
     def _build_graph(self):
         builder = StateGraph(ChatBotState)
+        builder.add_node("check_reference", self.check_reference_node)
+        builder.add_node("route_source", self.route_source_node)
         builder.add_node("rewrite", self.rewrite_node)
         builder.add_node("retrieve", self.retrieve_node)
+        builder.add_node("grade", self.grade_node)
+        builder.add_node("refine", self.refine_node)
         builder.add_node("generate", self.generate_node)
 
-        builder.add_edge(START, "rewrite")
+        builder.add_edge(START, "check_reference")
+
+        # [분기 1] 참조 필요 여부: 필요하면 소스 라우팅, 아니면 바로 답변
+        builder.add_conditional_edges(
+            "check_reference",
+            self.route_after_check,
+            {"route_source": "route_source", "generate": "generate"},
+        )
+
+        # [분기 2] 소스 자동 선택 → 검색 파이프라인
+        builder.add_edge("route_source", "rewrite")
         builder.add_edge("rewrite", "retrieve")
-        builder.add_edge("retrieve", "generate")
+        builder.add_edge("retrieve", "grade")
+
+        # [분기 3] 자기 평가 후 재검색 루프: 부족하면 refine(검색어 개선 + 소스 전환) → retrieve 로 되돌아감
+        builder.add_conditional_edges(
+            "grade",
+            self.route_after_grade,
+            {"generate": "generate", "refine": "refine"},
+        )
+        builder.add_edge("refine", "retrieve")
+
         builder.add_edge("generate", END)
 
         return builder.compile(checkpointer=self.checkpointer)
@@ -209,24 +370,15 @@ def _require_env(name: str) -> str:
     return value
 
 
-def _select_retriever_type() -> RetrieverType:
-    print("사용할 retriever를 선택하세요.")
-    print("  1) Neo4j (조문 그래프 검색)")
-    print("  2) Qdrant (PDF 텍스트/표/이미지 벡터 검색)")
-    while True:
-        choice = input("번호 입력 (1 또는 2): ").strip()
-        if choice == "1":
-            return "neo4j"
-        if choice == "2":
-            return "qdrant"
-        print("잘못된 입력입니다. 1 또는 2를 입력해주세요.")
-
-
 def _build_neo4j_retriever(client: OpenAI):
     neo4j_uri = _require_env("NEO4J_URI")
     neo4j_username = _require_env("NEO4J_USERNAME")
     neo4j_password = _require_env("NEO4J_PASSWORD")
-    driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_username, neo4j_password))
+    driver = GraphDatabase.driver(
+        neo4j_uri, 
+        auth=(neo4j_username, neo4j_password),
+        notifications_min_severity="OFF"    
+    )
     return Neo4jRetriever(client=client, driver=driver, database=TARGET_DATABASE), driver
 
 
@@ -235,41 +387,44 @@ def _build_qdrant_retriever(client: OpenAI):
     qdrant_api_key = os.getenv("QDRANT_API_KEY") or None
     collection_name = os.getenv("QDRANT_COLLECTION", QDRANT_COLLECTION)
     qdrant_client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
-    return QdrantRetriever(client=client, qdrant=qdrant_client, collection_name=collection_name), None
+    return QdrantRetriever(client=client, qdrant=qdrant_client, collection_name=collection_name), qdrant_client
 
 
 def main():
     api_key = _require_env("OPENAI_API_KEY")
     client = OpenAI(api_key=api_key)
 
-    retriever_type = _select_retriever_type()
+    # 두 retriever를 질문마다 그래프가 자동으로 고름
+    neo4j_retriever, driver = _build_neo4j_retriever(client)
+    qdrant_retriever, qdrant_client = _build_qdrant_retriever(client)
 
-    driver: Optional[Any] = None
-    if retriever_type == "neo4j":
-        retriever, driver = _build_neo4j_retriever(client)
-    else:
-        retriever, driver = _build_qdrant_retriever(client)
+    retrievers: Dict[RetrieverType, Any] = {
+        "neo4j": neo4j_retriever,
+        "qdrant": qdrant_retriever,
+    }
 
-    bot = LangGraphChatbot(client=client, retriever=retriever, retriever_type=retriever_type)
+    bot = LangGraphChatbot(client=client, retrievers=retrievers)
 
-    source_label = "Neo4j" if retriever_type == "neo4j" else "Qdrant"
-    print(f"\n💬 군 생활 법률·규정 챗봇 (박병장) - [{source_label} 검색 모드]입니다.")
+    print("\n💬 군 생활 법률·규정 챗봇 (박병장) - [소스 자동 선택 모드]입니다.")
+    print("질문 성격에 따라 Neo4j(조문)/Qdrant(PDF)를 알아서 골라 검색합니다.")
     print("종료하려면 exit를 입력하세요.\n")
     thread_id = "console-user-1"
 
     try:
         while True:
-            user_input = input("질문: ").strip()
+            user_input = input("🔍 질문: ").strip()
             if user_input.lower() in {"exit", "quit"}:
                 break
             if not user_input:
                 continue
 
             answer = bot.ask(user_query=user_input, top_k=3, thread_id=thread_id)
-            print(f"\n답변: {answer}\n")
+            print(f"\n✅ 답변: {answer}\n")
     finally:
         if driver is not None:
             driver.close()
+        if qdrant_client is not None:
+            qdrant_client.close()
 
 
 if __name__ == "__main__":
