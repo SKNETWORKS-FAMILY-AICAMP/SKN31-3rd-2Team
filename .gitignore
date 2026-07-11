@@ -2,7 +2,6 @@
 __pycache__/
 *.py[codz]
 *$py.class
-*.pyc
 
 # C extensions
 *.so
@@ -216,6 +215,7 @@ marimo/_lsp/
 __marimo__/
 
 # Streamlit
+.streamlit/secrets.toml
 
 # macOS system files
 .DS_Store
