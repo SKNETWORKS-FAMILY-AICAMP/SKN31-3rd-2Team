@@ -16,7 +16,7 @@ UI 점검용: 환경변수 MLA_FAKE_BACKEND=1 이면 DB·LLM 없이
 """
 from __future__ import annotations
 
-import os
+import os, sys
 import re
 from typing import Any
 
@@ -25,6 +25,13 @@ import streamlit as st
 # 답변 맨 끝의 [근거: ...] 줄 추출용
 _EVIDENCE_RE = re.compile(r"\[\s*근거\s*:\s*(.+?)\s*\]\s*$", re.DOTALL)
 
+_d = os.path.dirname(os.path.abspath(__file__))
+while _d != os.path.dirname(_d):  # 파일시스템 최상단까지
+    if os.path.exists(os.path.join(_d, "run_chatbot.py")):
+        if _d not in sys.path:
+            sys.path.insert(0, _d)
+        break
+    _d = os.path.dirname(_d)
 
 @st.cache_resource(show_spinner=False)
 def _get_bot():
