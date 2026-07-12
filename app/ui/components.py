@@ -24,7 +24,6 @@ def topbar() -> None:
     <div class="en">MILITARY LIFE ASSISTANT</div>
   </div>
   <div class="spacer"></div>
-  <div class="classification">참고용 · 법률자문 아님</div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -99,12 +98,7 @@ def bot_bubble(msg: dict, mode_code: str) -> str:
         else ""
     )
     refs_block = _refs_html(msg.get("refs") or [], msg.get("evidence_line"))
-    note = (
-        '<div class="note"><b>안내</b> · 본 답변은 참고용입니다. '
-        "정확한 판단은 소속 부대 법무관·국선변호사에게 확인하세요.</div>"
-        if msg.get("needs_reference")
-        else ""
-    )
+    note = ""
 
     return f"""
 <div class="msg">

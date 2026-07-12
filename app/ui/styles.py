@@ -174,6 +174,28 @@ header[data-testid="stHeader"]{background:transparent;}
 [data-testid="stChatInput"]{background:var(--paper-2);border:1.5px solid var(--paper-line);border-radius:0;}
 [data-testid="stChatInput"] textarea{color:var(--ink);}
 [data-testid="stBottomBlockContainer"],[data-testid="stBottom"]>div{background:transparent;}
+/* ---------- 시작화면 (병사/간부 선택) ---------- */
+.ws-hero{text-align:center;margin:32px auto 26px;max-width:640px;}
+.ws-crest{
+  width:56px;height:56px;margin:0 auto 16px;border:3px solid var(--amber);
+  display:grid;place-items:center;color:var(--amber);
+  font-weight:900;font-size:22px;transform:rotate(45deg);
+}
+.ws-crest span{transform:rotate(-45deg);}
+.ws-title{font-size:26px;font-weight:900;color:var(--ink);letter-spacing:-0.02em;}
+.ws-sub{font-size:11px;letter-spacing:.34em;color:var(--khaki-dim);margin-top:4px;}
+.ws-desc{font-size:13.5px;line-height:1.7;color:var(--ink-soft);margin-top:18px;}
+
+.ws-card{
+  border:1.5px solid var(--paper-line);background:var(--paper-2);
+  padding:26px 20px 20px;text-align:center;margin-bottom:12px;
+  border-top:4px solid var(--khaki-dim);
+}
+.ws-card-enlisted{border-top-color:var(--green-ok);}
+.ws-card-officer{border-top-color:var(--amber);}
+.ws-ic{font-size:40px;line-height:1;margin-bottom:10px;}
+.ws-ct{font-size:20px;font-weight:900;color:var(--ink);}
+.ws-cs{font-size:11.5px;letter-spacing:.06em;color:var(--ink-soft);margin-top:4px;}
 </style>
 """
 

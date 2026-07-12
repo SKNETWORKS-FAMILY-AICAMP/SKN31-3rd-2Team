@@ -21,13 +21,6 @@ def render() -> None:
             label_visibility="collapsed",
         )
 
-        _eyebrow("신분 / 계급 · ROLE")
-        st.selectbox(
-            "신분/계급",
-            options=RANKS,
-            key="rank",
-            label_visibility="collapsed",
-        )
 
         mode = ss.mode
         _eyebrow("고충 유형 · GRIEVANCE" if mode == "grievance" else "혜택 분야 · BENEFIT")

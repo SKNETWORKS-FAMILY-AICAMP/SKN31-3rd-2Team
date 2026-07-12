@@ -58,6 +58,7 @@ def init() -> None:
     ss.setdefault("messages", [])            # [{role, ...}] 대화 기록
     ss.setdefault("thread_id", uuid.uuid4().hex[:12])  # LangGraph 대화 스레드 id
     ss.setdefault("pending_question", None)  # FAQ 버튼 클릭 시 자동 질문
+    ss.setdefault("role_selected", False)
 
 
 def current_category() -> str | None:
