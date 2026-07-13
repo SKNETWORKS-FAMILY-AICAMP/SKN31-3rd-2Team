@@ -1,5 +1,7 @@
 import json
 import re
+import os
+from dotenv import load_dotenv
 from typing import Optional
 
 from openai import OpenAI
@@ -132,6 +134,7 @@ class QdrantRetriever:
 
 
 if __name__ == "__main__":
+    load_dotenv()
     # 사용 예시
     openai_client = OpenAI()
     qdrant_client = QdrantClient(url="http://localhost:6333")
