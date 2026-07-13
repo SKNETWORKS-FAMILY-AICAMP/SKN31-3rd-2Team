@@ -70,10 +70,15 @@ def search_law_knowledge_graph(user_query: str) -> List[str]:
     # 세션 드라이버 안전하게 닫기
     neo4j_driver.close()
     
-    # 2. 요청하신 스타일대로 오직 법령 조문 본문(description)만 문자열 리스트로 추출
-    descriptions = [doc.get("description", "") for doc in raw_results if doc.get("description")]
+    # 2. 조문 제목(법령명·조 번호)을 본문과 함께 담아, 근거에 '몇 조'까지 표기 가능하게 함
+    results = []
+    for doc in raw_results:
+        description = doc.get("description", "")
+        if not description:
+            continue
+        results.append(f"[조문] {doc.get('name', '')} (ID: {doc.get('id', '')})\n{description}")
+    return results
     
-    return descriptions
 
 
 
