@@ -19,7 +19,7 @@ def render() -> None:
         """
 <div class="ws-hero">
   <div class="ws-crest"><span>軍</span></div>
-  <div class="ws-title">병영생활 법률·규정 도우미</div>
+  <div class="ws-title">병영 생활 법률 · 규정 도우미</div>
   <div class="ws-sub">MILITARY LIFE ASSISTANT</div>
   <div class="ws-desc">먼저 당신의 신분을 선택하세요.<br>신분에 따라 박병장이 응대 방식을 맞춥니다.</div>
 </div>

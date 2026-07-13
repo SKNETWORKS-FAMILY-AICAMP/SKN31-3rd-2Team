@@ -16,8 +16,6 @@ def render() -> None:
             session.new_conversation()     
             st.rerun()                     
 
-        st.markdown("<br>", unsafe_allow_html=True) 
-
         # 현재 사용자의 신분 (병사 또는 간부)
         rank = ss.rank
         
@@ -34,7 +32,7 @@ def render() -> None:
                 ss.pending_question = q
 
         st.divider()
-        if st.button("⟳ 새 대화 시작", key="new_chat"):
+        if st.button("⟳ 새 대화 시작", key="new_chat", use_container_width=True):
             session.new_conversation()
             st.rerun()
 

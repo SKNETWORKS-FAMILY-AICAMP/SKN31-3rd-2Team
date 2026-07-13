@@ -51,7 +51,7 @@ def render() -> None:
     ss.messages.append({"role": "user", "content": question})
     category = session.current_category()
 
-    with st.spinner("박병장이 규정집 뒤지는 중…"):
+    with st.spinner("박병장이 캐비닛 깊숙이 규정집 들추는 중…"):
         result = api_client.ask_bot(
             question=question,
             rank=ss.rank,

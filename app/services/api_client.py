@@ -35,24 +35,9 @@ while _d != os.path.dirname(_d):  # 파일시스템 최상단까지
 
 @st.cache_resource(show_spinner=False)
 def _get_bot():
-    """봇/드라이버를 프로세스당 1회만 생성 (Streamlit rerun마다 재연결 방지)."""
-    from openai import OpenAI
-
-    from run_chatbot import (
-        LangGraphChatbot,
-        _build_neo4j_retriever,
-        _build_qdrant_retriever,
-        _require_env,
-    )
-
-    client = OpenAI(api_key=_require_env("OPENAI_API_KEY"))
-    neo4j_retriever, _driver = _build_neo4j_retriever(client)
-    qdrant_retriever, _qdrant = _build_qdrant_retriever(client)
-    return LangGraphChatbot(
-        client=client,
-        retrievers={"neo4j": neo4j_retriever, "qdrant": qdrant_retriever},
-        verbose=False,
-    )
+    """봇을 프로세스당 1회만 생성 (Streamlit rerun마다 재생성 방지)."""
+    from run_chatbot import LangGraphChatbot
+    return LangGraphChatbot(verbose=False)
 
 
 def _split_evidence(answer: str) -> tuple[str, str | None]:
@@ -64,24 +49,47 @@ def _split_evidence(answer: str) -> tuple[str, str | None]:
     return body, m.group(1).strip()
 
 
-def _format_refs(source: str | None, search_data: list[dict]) -> list[dict]:
-    """retriever가 실제로 가져온 문서를 근거 pill 목록으로 변환.
+# 도구 이름 → 화면 출처(배지) 매핑
+_TOOL_SOURCE = {
+    "search_law_knowledge_graph": "neo4j",
+    "search_guidance_knowledge_base": "qdrant",
+}
 
-    - neo4j 행: {id, name, description, score?}  (ARTICLE 조문)
-    - qdrant 행: {doc_name, page, type, text, ...} (PDF 청크)
+# 법령 도구 출력의 조문 헤더: "[조문] 군인사법 제31조 (ID: ...::제31조)"
+_LAW_LINE_RE = re.compile(r"\[조문\]\s*(?P<name>.*?)\s*\(ID:\s*(?P<id>.*?)\)")
+
+
+def _refs_from_messages(messages) -> tuple[str | None, list[dict]]:
+    """에이전트 메시지에서 (출처, 근거 pill 목록)을 파생.
+
+    - 어떤 @tool이 호출됐는지로 출처(neo4j/qdrant)를 판별.
+    - 법령 도구 출력의 '[조문] 이름 (ID:...)' 헤더를 파싱해 조문 pill 생성.
+    - 길라잡이 도구는 현재 text만 반환하므로 '참조 문서 N' 단위 pill로만 표기.
     """
+    source: str | None = None
     refs: list[dict] = []
-    for r in search_data or []:
-        if source == "qdrant":
-            label = f"{r.get('doc_name', 'PDF')} · p.{r.get('page', '?')}"
-            refs.append({"tag": "PDF", "label": label})
-        else:
-            # id 예: "군인사법(대통령령)(제N호)(날짜)::제31조" → 조번호만 뒤에 붙임
-            article_no = str(r.get("id", "")).split("::")[-1]
-            name = r.get("name") or article_no or "조문"
-            label = f"{name} · {article_no}" if article_no and article_no != name else name
-            refs.append({"tag": "LAW", "label": label})
-    return refs
+
+    for m in messages:
+        is_tool = getattr(m, "type", None) == "tool" or m.__class__.__name__ == "ToolMessage"
+        if not is_tool:
+            continue
+
+        tool_name = getattr(m, "name", "") or ""
+        source = _TOOL_SOURCE.get(tool_name, source)
+        content = m.content if isinstance(m.content, str) else str(m.content)
+
+        if tool_name == "search_law_knowledge_graph":
+            for mt in _LAW_LINE_RE.finditer(content):
+                name = (mt.group("name") or "").strip()
+                article_no = (mt.group("id") or "").strip().split("::")[-1]
+                label = f"{name} · {article_no}" if article_no and article_no != name else (name or article_no)
+                if label:
+                    refs.append({"tag": "LAW", "label": label})
+        elif tool_name == "search_guidance_knowledge_base":
+            for i in range(1, content.count("[참조 문서") + 1):
+                refs.append({"tag": "PDF", "label": f"길라잡이 참조 {i}"})
+
+    return source, refs
 
 
 def _fake_response(question: str) -> dict[str, Any]:
@@ -133,28 +141,29 @@ def ask_bot(
         user_query = " ".join(tags) + " " + question
 
         config = {"configurable": {"thread_id": thread_id}}
-        input_state = {
-            "user_query": user_query,
-            "top_k": top_k,
-            "messages": [HumanMessage(content=user_query)],
-        }
-        final = bot.workflow.invoke(input_state, config=config)
+        result = bot.agent.invoke(
+            {"messages": [HumanMessage(content=user_query)]},
+            config=config,
+        )
+        messages = result["messages"]
 
-        answer = final.get("answer") or "답변을 생성하지 못했습니다."
-        body, evidence_line = _split_evidence(answer)
-        needs_reference = bool(final.get("needs_reference"))
+        answer = messages[-1].content if messages else "답변을 생성하지 못했습니다."
+        if isinstance(answer, list):  # content가 블록 리스트로 올 때 방어
+            answer = "".join(p.get("text", "") for p in answer if isinstance(p, dict))
+        body, evidence_line = _split_evidence(answer or "")
+
+        source, refs = _refs_from_messages(messages)
+        needs_reference = bool(refs)
 
         return {
             "ok": True,
             "answer": body,
             "evidence_line": evidence_line,
-            "source": final.get("source") if needs_reference else None,
+            "source": source if needs_reference else None,
             "needs_reference": needs_reference,
-            "refs": _format_refs(final.get("source"), final.get("search_data") or [])
-            if needs_reference
-            else [],
+            "refs": refs,
         }
-    except Exception as exc:  # 연결 실패·키 누락 등 → 화면에 에러 버블로 안내
+    except Exception as exc:
         return {
             "ok": False,
             "error": (

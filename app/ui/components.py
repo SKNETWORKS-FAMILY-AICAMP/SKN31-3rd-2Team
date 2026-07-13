@@ -20,7 +20,7 @@ def topbar() -> None:
 <div class="topbar">
   <div class="crest"><span>軍</span></div>
   <div>
-    <div class="kr">병영생활 법률·규정 도우미</div>
+    <div class="kr">병영 생활 법률 · 규정 도우미</div>
     <div class="en">MILITARY LIFE ASSISTANT</div>
   </div>
   <div class="spacer"></div>
@@ -28,7 +28,6 @@ def topbar() -> None:
 """,
         unsafe_allow_html=True,
     )
-
 
 
 def welcome(mode_label: str) -> str:

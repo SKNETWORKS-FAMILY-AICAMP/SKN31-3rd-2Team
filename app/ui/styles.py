@@ -14,24 +14,24 @@ CSS = """
 :root{
   /* 메인 색상: 프레시 아미 (산뜻한 숲의 색) */
   --shell:#1A2421;        /* 가장 어두운 흑녹색 */
-  --od:#2F5233;           /* 메인 사이드바 바탕: 산뜻하고 짙은 그린 */
-  --od-2:#3B6940;         /* 활성화된 버튼 등: 조금 더 밝은 그린 */
-  --od-line:#7A9D79;      /* 사이드바 테두리 및 구분선 */
+  --od:#3A4A3F;           /* 메인 사이드바 바탕 */
+  --od-2:#46584E;         /* 활성화된 버튼 등: 메인보다 조금 더 밝은 그린 */
+  --od-line:#5E7268;      /* 사이드바 테두리 및 구분선 */
   
   /* 보조 포인트 색상 */
-  --khaki:#B4C5B0;        /* 칙칙한 카키 대신 맑고 은은한 세이지 그린 */
+  --khaki:#B4C5B0;        /* 은은한 세이지 그린 */
   --khaki-dim:#84A587;
   
-  /* 배경 색상: 누런 종이(paper)를 깨끗한 무채색 베이스로 교체 */
+  /* 배경 색상 */
   --paper:#F4F7F4;        /* 전체 배경: 아주 옅은 민트/그레이 톤 화이트 */
   --paper-2:#FFFFFF;      /* 메시지 버블 및 카드: 순백색 */
   --paper-line:#D1DBD4;   /* 연한 구분선 */
   
   /* 텍스트 색상 */
-  --ink:#1A2421;          /* 기본 텍스트 (눈이 편안한 짙은 흑녹색) */
+  --ink:#1A2421;          /* 기본 텍스트 (짙은 흑녹색) */
   --ink-soft:#5C6B64;     /* 설명 텍스트 */
   
-  /* 포인트 뱃지 색상 (경고, 성공 등은 기존의 눈에 띄는 색 유지) */
+  /* 포인트 뱃지 색상 (경고, 성공 등은 기존의 눈에 띄는 색) */
   --amber:#E79E24;        
   --amber-soft:#F5B942;
   --red:#D93838;          
@@ -39,10 +39,9 @@ CSS = """
   --green-ok:#388E3C;     
 }
 
-/* ---------- 앱 배경: 종이 질감 제거 및 모던한 배경 ---------- */
+/* ---------- 앱 배경---------- */
 .stApp{
   background-color:var(--paper);
-  /* 칙칙했던 종이 질감을 삭제하여 화면을 쾌적하고 깔끔하게 만듭니다 */
 }
 header[data-testid="stHeader"]{background:transparent;}
 .block-container{padding-top:0.8rem;padding-bottom:6.5rem;max-width:1050px;}
@@ -52,12 +51,12 @@ header[data-testid="stHeader"]{background:transparent;}
   background:var(--od);
   border-right:2px solid var(--od-line);
 }
-[data-testid="stSidebar"] *{color:#FFFFFF;} /* 텍스트를 또렷한 흰색으로 변경 */
+[data-testid="stSidebar"] *{color:#B4C5B0;} 
 [data-testid="stSidebar"] .eyebrow{
-  font-size:10px;letter-spacing:.24em;color:var(--khaki)!important;
+  font-size:14px;letter-spacing:.24em;color:#DCE4DE!important;
   font-weight:700;display:flex;align-items:center;gap:8px;margin:6px 0 2px;
 }
-[data-testid="stSidebar"] .eyebrow::after{content:"";flex:1;height:1px;background:var(--od-line);}
+[data-testid="stSidebar"] .eyebrow::after{content:"";flex:1;height:1px;background:#DCE4DE;}
 
 /* selectbox / pills / 버튼 */
 [data-testid="stSidebar"] [data-baseweb="select"] > div{
@@ -71,12 +70,15 @@ header[data-testid="stHeader"]{background:transparent;}
 [data-testid="stSidebar"] button[kind="pillsActive"]{
   background:var(--amber);border-color:var(--amber);color:var(--shell);font-weight:700;
 }
+[data-testid="stSidebar"] .stButton{
+  margin-bottom:-6px;   /* 값이 작을수록 촘촘. 0~6px 사이로 조절 */
+}
 [data-testid="stSidebar"] .stButton button{
   width:100%;text-align:left;justify-content:flex-start;
-  background:transparent;border:1px dashed var(--od-line);border-radius:0;
-  color:var(--paper);font-size:12.5px;padding:8px 11px;
+  background:rgba(255,255,255,.05);border:1px dashed var(--od-line);border-radius:0;
+  color:var(--paper);font-size:12.5px;padding:7px 13px;
 }
-[data-testid="stSidebar"] .stButton button:hover{border-color:var(--amber);color:var(--amber-soft);}
+[data-testid="stSidebar"] .stButton button:hover{background:#2B352F}
 
 /* 긴급 신고 블록 */
 .report{border:1.5px solid var(--red-soft);background:rgba(217,56,56,.18);padding:12px 13px;margin-top:10px;}
@@ -88,7 +90,7 @@ header[data-testid="stHeader"]{background:transparent;}
 /* ---------- 상단 바 ---------- */
 .topbar{
   background:var(--shell);border-bottom:2px solid var(--od-line);
-  display:flex;align-items:center;gap:14px;padding:10px 18px;color:var(--paper);
+  display:flex;align-items:center;gap:18px;padding:12px 20px;color:var(--paper);
   margin:0 0 12px;
 }
 .topbar .crest{
@@ -112,9 +114,9 @@ header[data-testid="stHeader"]{background:transparent;}
   width:34px;height:34px;flex:none;display:grid;place-items:center;
   font-size:11.5px;font-weight:900;
 }
-.avatar.bot{background:var(--od);color:var(--amber-soft);border:1.5px solid var(--od-line);}
-.avatar.me{background:var(--paper-2);color:var(--ink);border:1.5px solid var(--paper-line);}
-.bubble{border:1.5px solid var(--paper-line);background:var(--paper-2);flex:1;min-width:0;}
+.avatar.bot{background:var(--od);color:var(--amber-soft);}
+.avatar.me{background:var(--paper-2);color:var(--ink);border: 1px solid var(--paper-line);}
+.bubble{border:1px solid var(--paper-line);background:var(--paper-2);flex:1;min-width:0;}
 .msg.user .bubble{background:var(--od);border-color:var(--od-line);}
 .msg.user .b-body{color:var(--paper-2);}
 .b-head{display:flex;align-items:center;gap:9px;background:var(--paper-line);padding:5px 12px;flex-wrap:wrap;}
@@ -159,33 +161,51 @@ header[data-testid="stHeader"]{background:transparent;}
 .stamp::before{top:3px;}.stamp::after{bottom:3px;}
 
 /* ---------- 채팅 입력 ---------- */
-[data-testid="stChatInput"]{background:var(--paper-2);border:1.5px solid var(--paper-line);border-radius:0;}
-[data-testid="stChatInput"] textarea{color:var(--ink);}
-[data-testid="stBottomBlockContainer"],[data-testid="stBottom"]>div{background:transparent;}
+/* ① 바깥 컨테이너 */
+[data-testid="stChatInput"] > div{border-radius:0 !important;border-color:var(--paper-line)}
+[data-testid="stChatInput"] > div:focus-within{border-color:var(--paper-line) !important;}
+/* ② 안쪽 BaseWeb 입력 요소 */
+[data-testid="stChatInput"] [data-baseweb="textarea"],
+[data-testid="stChatInput"] [data-baseweb="base-input"]{border-radius:0 !important;}
+[data-testid="stChatInput"] [data-baseweb="textarea"]:focus-within{box-shadow:none !important;}
+[data-testid="stBottomBlockContainer"]{max-width:1050px;margin-left:auto;margin-right:auto;}
 
 /* ---------- 시작화면 (병사/간부 선택) ---------- */
 .ws-hero{text-align:center;margin:32px auto 26px;max-width:640px;}
 .ws-crest{
-  width:56px;height:56px;margin:0 auto 16px;border:3px solid var(--amber);
+  width:56px;height:56px;margin:0 auto 16px !important;border:3px solid var(--amber);
   display:grid;place-items:center;color:var(--amber);
   font-weight:900;font-size:22px;transform:rotate(45deg);
 }
 .ws-crest span{transform:rotate(-45deg);}
-.ws-title{font-size:26px;font-weight:900;color:var(--ink);letter-spacing:-0.02em;}
-.ws-sub{font-size:11px;letter-spacing:.34em;color:var(--khaki-dim);margin-top:4px;}
-.ws-desc{font-size:13.5px;line-height:1.7;color:var(--ink-soft);margin-top:18px;}
+.ws-title{font-size:26px;font-weight:900;color:var(--ink);letter-spacing:-0.02em;text-align:center !important;}
+.ws-sub{font-size:11px;letter-spacing:.34em;color:var(--khaki-dim);margin-top:4px;text-align:center !important;}
+.ws-desc{font-size:13.5px;line-height:1.7;color:var(--ink-soft);margin-top:18px;text-align:center !important;}
 
 .ws-card{
   border:1.5px solid var(--paper-line);background:var(--paper-2);
-  padding:26px 20px 20px;text-align:center;margin-bottom:12px;
+  padding:40px 20px 40px;text-align:center;margin-top:14px;margin-bottom:12px;
   border-top:4px solid var(--khaki-dim);
 }
 .ws-card-enlisted{border-top-color:var(--green-ok);}
 .ws-card-officer{border-top-color:var(--amber);}
 .ws-ic{font-size:40px;line-height:1;margin-bottom:10px;}
-.ws-ct{font-size:20px;font-weight:900;color:var(--ink);}
-.ws-cs{font-size:11.5px;letter-spacing:.06em;color:var(--ink-soft);margin-top:4px;}
+.ws-ct{font-size:22px;font-weight:900;color:var(--ink);}
+.ws-cs{font-size:15px;letter-spacing:.06em;color:var(--ink-soft);margin-top:4px;}
+
+/* ---------- 시작화면 버튼(병사로 시작 / 간부로 시작) ---------- */
+[data-testid="stColumn"]:has(.ws-card) button{ 
+  border-radius:0;border:1.5px solid var(--paper-line);
+  background:var(--paper-2);color:var(--ink);font-size:20px;font-weight: 800;
+  letter-spacing:.04em;padding:12px 0;transition:all .15s ease;
+}
+[data-testid="stColumn"]:has(.ws-card) button:hover{
+  border-color:color-mix(in srgb, var(--od) 70%, white);
+  background: color-mix(in srgb, var(--od) 70%, white);
+  color:var(--paper-2);                
+}
 </style>
+
 """
 
 
