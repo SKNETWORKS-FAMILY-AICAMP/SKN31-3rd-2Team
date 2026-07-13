@@ -39,7 +39,7 @@ def render() -> None:
 
 
     # 2) 질문 수신 (입력창 우선, FAQ 클릭은 pending으로)
-    question = st.chat_input(INPUT_PLACEHOLDER[ss.mode])
+    question = st.chat_input(INPUT_PLACEHOLDER)
     if not question and ss.pending_question:
         question = ss.pending_question
         ss.pending_question = None

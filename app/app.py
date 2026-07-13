@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 from state import session
-from ui import chat, components, context_banner, sidebar, styles, welcome_screen
+from ui import chat, components, sidebar, styles, welcome_screen
 
 session.init()
 styles.inject()
@@ -26,5 +26,4 @@ if not st.session_state.role_selected:
 
 sidebar.render()
 components.topbar()
-context_banner.render()
 chat.render()
