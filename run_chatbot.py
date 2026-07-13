@@ -81,27 +81,50 @@ class LangGraphChatbot:
             checkpointer=self.checkpointer,  # thread_id 별 단기 메모리
         )
 
-    def ask(self, user_query: str, thread_id: str = "default-thread") -> str:
-        config = {"configurable": {"thread_id": thread_id}}
-        result = self.agent.invoke(
-            {"messages": [("human", user_query)]},
-            config=config,
-        )
+    def ask(self, user_query: str, thread_id: str = "default-thread") -> tuple[list[str], str]:
+            """유저 질문을 받아 (참조문서_리스트, 최종_답변)을 반환합니다."""
+            config = {"configurable": {"thread_id": thread_id}}
+            result = self.agent.invoke(
+                {"messages": [("human", user_query)]},
+                config=config,
+            )
 
-        # 어떤 도구가 실제로 호출됐는지 확인용 로그
-        if self.verbose:
+            references = []
+            
+            # 1. State 메시지들을 돌면서 도구(Tool)가 반환한 결과만 쏙쏙 추출
             for m in result["messages"]:
-                for call in getattr(m, "tool_calls", None) or []:
-                    print(f"  [도구 호출] {call['name']} ← {call['args']}")
+                if getattr(m, "type", None) == "tool" or m.__class__.__name__ == "ToolMessage":
+                    # 도구가 반환한 원본 텍스트 내용 저장
+                    references.append(m.content)
 
-        return result["messages"][-1].content
+            # 2. 가장 마지막 메시지(AI의 최종 대답) 추출
+            final_response = result["messages"][-1].content
 
+            # 3. 요청하신 프린트 로직 진행
+            if self.verbose:
+                print("\n" + "="*60)
+                print("📄 [참조 문서 목록 (References)]")
+                print("="*60)
+                if references:
+                    for i, ref in enumerate(references, 1):
+                        print(f"[{i}번째 검색 결과]\n{ref}")
+                        print("-" * 40)
+                else:
+                    print("(참조한 문서 없음 - 잡담 또는 자체 답변)")
+                    
+                print("\n" + "="*60)
+                print("✨ [최종 Response]")
+                print("="*60)
+                print(final_response)
+                print("="*60 + "\n")
+
+            # [참조문서 리스트, 최종 답변] 구조로 리턴
+            return references, final_response
 
 def main():
     bot = LangGraphChatbot()
 
     print("\n💬 군 생활 법률·규정 챗봇 (박병장) - [create_agent 자율 판단 모드]입니다.")
-    print("질문에 따라 박병장이 법령(Neo4j)/길라잡이(Qdrant) 도구를 알아서 골라 검색합니다.")
     print("종료하려면 exit를 입력하세요.\n")
 
     thread_id = "console-user-1"
@@ -112,8 +135,9 @@ def main():
         if not user_input:
             continue
 
-        answer = bot.ask(user_query=user_input, thread_id=thread_id)
-        print(f"\n✅ 답변: {answer}\n")
+        # 함수 리턴 구조가 바뀐 것에 맞춰 unpacking 진행
+        references, answer = bot.ask(user_query=user_input, thread_id=thread_id)
+
 
 
 if __name__ == "__main__":

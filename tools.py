@@ -9,20 +9,26 @@ from neo4j import GraphDatabase
 from graphdb_retriever import Neo4jRetriever
 
 @tool
-def search_guidance_knowledge_base(user_query: str) -> List[str]:
+def search_guidance_knowledge_base(user_query: str) -> str: # 반환 타입을 str로 변경
     """Search the military guidance knowledge base to find relevant regulation documents.
-    
+
     Use this tool when the user asks questions about military regulations, 
     vacation rules, executive officer guidelines, or specific table data in the document.
-    
+    Especially effective for queries regarding the '2026 초급간부 길라잡이' or '병영생활 안내서' topics such as:
+    - 보수/수당 (초급간부/병사 보수, 급식/물자, 군인공제회 등)
+    - 복지/시설 (나라사랑카드, 장병내일준비적금, 청약통장, 군 마트/Wa-Mall, 휴양시설, 체력단련장)
+    - 인사/근무 (휴가·외출·외박, 장기/연장복무, 전과 제도, 표창/상훈, 예비군훈련)
+    - 진료/재해보상 (군 보건의료기관, 응급진료, 사망/장애보상금, 병 무료 상해보험)
+    - 고충/상담 (성고충/병영생활전문상담관, 국방헬프콜 1303, 군 인권지키미)
+
     Args:
-        user_query: The specific search query or user question in Korean.
+        user_query: The specific search query or user question in Korean (e.g., "초급간부 휴가 규정", "장병내일준비적금 신청", "군병원 응급진료").
     """
     # 💡 LangGraph 내부에서 안정적으로 돌 수 있게 환경변수와 클라이언트를 함수 내에서 초기화합니다.
     load_dotenv()
     
     openai_client = OpenAI()
-    qdrant_client = QdrantClient(url=os.getenv("http://localhost:6333"))
+    qdrant_client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333")) # 환경변수 처리 개선
     
     retriever = QdrantRetriever(
         client=openai_client,
@@ -30,14 +36,22 @@ def search_guidance_knowledge_base(user_query: str) -> List[str]:
         collection_name="guidance_vectordb"
     )
     
-    # 검색 후 오직 page_content(text)만 리스트로 추출
+    # 검색 결과 가져오기
     raw_results = retriever.retrieve(user_query=user_query, top_k=4)
-    return [doc["text"] for doc in raw_results]
-
+    
+    # 오직 page_content(text)만 추출하여 가독성 좋은 텍스트로 합치기
+    # 각 문서 사이에 구분선을 넣어 LLM과 사람이 모두 읽기 편하게 만듭니다.
+    formatted_docs = []
+    for i, doc in enumerate(raw_results, 1):
+        # 텍스트 내의 특수문자나 불필요한 공백을 가볍게 정리할 수 있습니다.
+        clean_text = doc["text"].strip()
+        formatted_docs.append(f"--- [참조 문서 {i}] ---\n{clean_text}")
+        
+    return "\n\n".join(formatted_docs)
 
 
 @tool
-def search_law_knowledge_graph(user_query: str) -> List[str]:
+def search_law_knowledge_graph(user_query: str) -> str: # 반환 타입을 str로 변경
     """Search the Neo4j legal knowledge graph to retrieve specific law articles and referenced terms.
     
     Use this tool when the user queries explicit statutory provisions, specific article numbers 
@@ -70,16 +84,15 @@ def search_law_knowledge_graph(user_query: str) -> List[str]:
     # 세션 드라이버 안전하게 닫기
     neo4j_driver.close()
     
-    # 2. 조문 제목(법령명·조 번호)을 본문과 함께 담아, 근거에 '몇 조'까지 표기 가능하게 함
-    results = []
-    for doc in raw_results:
-        description = doc.get("description", "")
+    # 2. 조문 제목(법령명·조 번호)을 본문과 함께 담아 문자열로 묶기
+    formatted_docs = []
+    for i, doc in enumerate(raw_results, 1):
+        description = doc.get("description", "").strip()
         if not description:
             continue
-        results.append(f"[조문] {doc.get('name', '')} (ID: {doc.get('id', '')})\n{description}")
-    return results
-    
-
+        formatted_docs.append(f"--- [참조 조문 {i}] ---\n[조문] {doc.get('name', '')} (ID: {doc.get('id', '')})\n{description}")
+        
+    return "\n\n".join(formatted_docs)
 
 
 # # ==========================================
