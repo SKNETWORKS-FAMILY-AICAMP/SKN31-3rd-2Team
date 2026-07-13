@@ -14,11 +14,16 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from state import session          # noqa: E402
-from ui import chat, components, context_banner, sidebar, styles  # noqa: E402
+from state import session
+from ui import chat, components, context_banner, sidebar, styles, welcome_screen
 
 session.init()
 styles.inject()
+
+if not st.session_state.role_selected:
+    welcome_screen.render()
+    st.stop()
+
 sidebar.render()
 components.topbar()
 context_banner.render()
