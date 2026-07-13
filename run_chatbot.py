@@ -18,7 +18,7 @@ from vectordb_retriever import QdrantRetriever
 load_dotenv()
 
 TARGET_DATABASE = "lawdb"
-QDRANT_COLLECTION = "GUIDANCE"
+QDRANT_COLLECTION = "guidance_vectordb"
 
 RetrieverType = Literal["neo4j", "qdrant"]
 
