@@ -30,7 +30,21 @@ def _history_html(ss) -> str:
             blocks.append(components.user_bubble(m["content"]))
         else:
             blocks.append(components.bot_bubble(m, _mode_code(m)))
+    # 자동 스크롤용 앵커: 대화 맨 끝에 보이지 않는 표식을 둔다.
+    blocks.append('<div id="chat-bottom-anchor"></div>')
     return "".join(blocks)
+
+def _scroll_to_bottom() -> None:
+    """대화 맨 아래 앵커로 부드럽게 스크롤."""
+    st.markdown(
+        """
+<script>
+  const anchor = window.parent.document.getElementById("chat-bottom-anchor");
+  if (anchor) { anchor.scrollIntoView({behavior: "smooth", block: "end"}); }
+</script>
+""",
+        unsafe_allow_html=True,
+    )
 
 
 def render() -> None:
@@ -58,6 +72,8 @@ def render() -> None:
         ss.pending_question = None
 
     if not question:
+        # 화면을 다 그린 뒤 최신 메시지(맨 아래)로 자동 스크롤.
+        _scroll_to_bottom()
         return
 
     # 3) 사용자 메시지 기록 + 백엔드 호출
