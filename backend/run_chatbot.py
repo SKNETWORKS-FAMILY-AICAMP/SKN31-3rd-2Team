@@ -8,13 +8,14 @@
 """
 
 import os
+import sys
 from dotenv import load_dotenv
-
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 
-from tools import search_law_knowledge_graph, search_guidance_knowledge_base
+from backend.tools import search_law_knowledge_graph, search_guidance_knowledge_base
 from langchain_core.messages import ToolMessage
 
 load_dotenv()

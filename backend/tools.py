@@ -1,11 +1,13 @@
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from langchain_core.tools import tool  # LangGraph/LangChain 전용 데코레이터
 from dotenv import load_dotenv
 from openai import OpenAI
 from qdrant_client import QdrantClient
-from vectordb_retriever import QdrantRetriever
+from backend.vectordb_retriever import QdrantRetriever
 from neo4j import GraphDatabase
-from graphdb_retriever import Neo4jRetriever
+from backend.graphdb_retriever import Neo4jRetriever
 
 # =====================================================================
 # [수정] 클라이언트/드라이버를 모듈 레벨에서 한 번만 생성해 재사용한다.

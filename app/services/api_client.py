@@ -17,6 +17,7 @@ UI 점검용: 환경변수 MLA_FAKE_BACKEND=1 이면 DB·LLM 없이
 from __future__ import annotations
 
 import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
 import re
 from typing import Any
 
@@ -36,7 +37,7 @@ while _d != os.path.dirname(_d):  # 파일시스템 최상단까지
 @st.cache_resource(show_spinner=False)
 def _get_bot():
     """봇을 프로세스당 1회만 생성 (Streamlit rerun마다 재생성 방지)."""
-    from run_chatbot import LangGraphChatbot
+    from backend.run_chatbot import LangGraphChatbot
     return LangGraphChatbot(verbose=False)
 
 
