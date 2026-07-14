@@ -11,6 +11,10 @@ from qdrant_client.models import Filter, FieldCondition, MatchValue
 CHAT_MODEL = "gpt-4o"
 EMBEDDING_MODEL = "text-embedding-3-large"  # 적재할 때 쓴 모델과 반드시 동일해야 함
 
+# 재랭킹 점수(0~10) 임계값 / 임계값을 넘는 문서가 없을 때 반환할 최소 개수
+DEFAULT_SCORE_THRESHOLD = 6.0
+DEFAULT_FALLBACK_K = 1
+
 SCHEMA_DESCRIPTION = """
 Qdrant collection: guidance_vectordb
 포인트(payload) 필드:
@@ -26,16 +30,31 @@ Qdrant collection: guidance_vectordb
 class QdrantRetriever:
     """
     [수정 배경]
-    - 기존의 Vector 유사도 기반 검색(Top-K)만으로는 질문과 직접적인 연관성이 떨어지는 노이즈 문서들이 상위에 배치되어 
+    - 기존의 Vector 유사도 기반 검색(Top-K)만으로는 질문과 직접적인 연관성이 떨어지는 노이즈 문서들이 상위에 배치되어
       'llm_context_precision_with_reference' 점수가 낮게 나오는 문제 존재.
     - 또한 무관한 컨텍스트가 LLM에 많이 전달되면서 답변의 신뢰도('faithfulness')와 질문 적합도('answer_relevancy')를 저하시킴.
-    - 이에 대한 해결책으로 HuggingFace 등 무거운 외부 Cross-Encoder 모델을 추가 서빙(Load)하지 않고, 
+    - 이에 대한 해결책으로 HuggingFace 등 무거운 외부 Cross-Encoder 모델을 추가 서빙(Load)하지 않고,
       이미 사용 중인 OpenAI 'gpt-4o'를 2-Step으로 활용하는 'LLM 기반 Reranker' 구조를 도입.
-    
+
     [개선된 Rerank 프로세스]
     1. Vector DB에서 넉넉하게 N개(search_limit=15)의 관련 문서를 1차적으로 긁어옵니다. (높은 context_recall 확보)
-    2. 가져온 N개의 문서를 gpt-4o에게 보내어 질문과의 실질적 '연관성 및 중요도'를 기준으로 정렬 및 필터링하도록 지시합니다.
-    3. 정렬된 문서 중 최상위 K개(top_k=5)만 최종적으로 슬라이싱하여 LLM 답변 생성용 컨텍스트로 제공합니다.
+    2. 가져온 N개의 문서 전체에 대해 gpt-4o가 질문과의 관련도를 0~10점으로 채점합니다.
+       (기존처럼 "포함/배제"하지 않고, 문서를 하나도 버리지 않은 채 점수만 매깁니다.)
+    3. score_threshold(기본 6.0)를 넘는 문서만 채택합니다.
+       - 단답형 질문처럼 정답 문서가 1개뿐이면 자연스럽게 1개만 반환됩니다.
+       - 복합 질문이라 여러 문서가 다 높은 점수를 받으면 여러 개가 통과합니다.
+       - 임계값을 넘는 문서가 하나도 없으면, 최상위 fallback_k(기본 1)개만 반환합니다.
+    4. top_k는 더 이상 "무조건 채워야 하는 개수"가 아니라, "최대 몇 개까지 허용할지"에 대한 상한선 역할만 합니다.
+
+    [이전 버전과의 차이 / 수정 이유]
+    - 이전 버전은 LLM이 "노이즈"라고 배제한 문서를 안전장치로 다시 리스트 뒤에 붙이는
+      백필(backfill) 로직이 있었는데, 이게 두 가지 문제를 동시에 일으켰다.
+      1) LLM이 배제한(=관련 없다고 판단한) 문서가 top_k 슬라이싱 안에 다시 섞여 들어가
+         context_precision을 깎아먹었다.
+      2) LLM이 실수로 진짜 정답 문서를 "관련 없음"으로 잘못 판단하면, 그 문서가 원본
+         벡터 순위 그대로 뒤로 밀려났다가 top_k 밖으로 잘려나가 context_recall이 깨졌다.
+    - 이번 버전은 "포함/배제" 대신 "전체 점수화 + 임계값 컷"으로 바꿔 문서를 아예 버리지
+      않으므로, 위 두 문제가 구조적으로 발생하지 않는다.
     """
 
     def __init__(self, client: OpenAI, qdrant: QdrantClient, collection_name: str):
@@ -98,30 +117,29 @@ class QdrantRetriever:
             return None
         return Filter(must=conditions)
 
-    def _rerank_with_llm(self, user_query: str, retrieved_docs: list[dict]) -> list[dict]:
+    def _score_with_llm(self, user_query: str, retrieved_docs: list[dict]) -> list[tuple[dict, float]]:
         """
-        [수정사항: LLM 기반 자체 Rerank 메서드 추가]
-        - Vector DB의 밀도 낮은 단순 코사인 유사도를 보완하기 위해, LLM의 문맥 이해 능력을 이용해 2차 정렬을 수행합니다.
-        - 외부 오픈소스 리랭커 모델 로드가 불가능한 인프라 제약 상황에서 가장 안정적이고 성능이 뛰어난 대안입니다.
-        - 질문과 전혀 어울리지 않는 노이즈 문서를 순위에서 강제로 제외하거나 뒤로 배치하여, 
-          최종 프롬프트에 들어갈 컨텍스트의 밀도(Context Precision)를 대폭 끌어올립니다.
+        문서를 배제하지 않고 전 문서에 관련도 점수(0~10)를 매긴다.
+        (doc, score) 쌍의 리스트를 점수 내림차순으로 반환한다.
         """
         if not retrieved_docs:
             return []
-        
-        # LLM에게 순위를 매기도록 넘겨줄 후보 문서 목록을 포맷팅합니다.
+
         docs_input = ""
         for idx, doc in enumerate(retrieved_docs):
             docs_input += f"--- Document [ID: {idx}] ---\n{doc['text']}\n\n"
 
         system_prompt = """
 당신은 정보 검색 및 랭킹 전문가입니다.
-제공된 'Document 목록'에서 사용자의 '질문(Query)'과 실질적으로 가장 연관성이 높고 질문에 정확하게 답할 수 있는 문서들의 ID 목록을 관련성 순서대로 나열해 주세요.
+제공된 'Document 목록'의 모든 문서에 대해, 사용자의 '질문(Query)'과의 관련도를
+0~10 사이 정수 점수로 채점해 주세요.
 
 [규칙]
-1. 반드시 질문에 도움을 주는 우선순위가 높은 순서대로 정렬해야 합니다.
-2. 질문에 전혀 쓸모없는 정보이거나 관련이 없는 노이즈 문서의 ID는 결과 리스트에서 과감히 배제하세요.
-3. 결과는 불필요한 사설 없이 오직 JSON 리스트 형태로만 반환하세요. (예: [3, 0, 2])
+1. 반드시 목록에 있는 모든 Document ID에 대해 점수를 매겨야 합니다. (하나도 빠짐없이)
+2. 질문에 직접적으로 답할 수 있는 문서일수록 높은 점수(8~10)를 주세요.
+3. 키워드만 겹칠 뿐 질문의 핵심 의도와 무관한 문서는 낮은 점수(0~3)를 주세요.
+4. 결과는 불필요한 설명 없이 오직 JSON 객체로만 반환하세요.
+   예: {"0": 9, "1": 2, "2": 6, ...}
 """
         user_prompt = f"""
 [사용자 질문]
@@ -133,7 +151,7 @@ class QdrantRetriever:
         try:
             response = self.client.chat.completions.create(
                 model=CHAT_MODEL,
-                temperature=0,  # 랭킹의 일관성을 위해 온도를 0으로 고정합니다.
+                temperature=0,  # 채점의 일관성을 위해 온도를 0으로 고정합니다.
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -141,59 +159,46 @@ class QdrantRetriever:
             )
             raw = response.choices[0].message.content.strip()
             raw = re.sub(r'^```(json)?\s*|\s*```$', '', raw, flags=re.MULTILINE).strip()
-            
-            # 정렬된 ID(인덱스) 리스트 파싱
-            ranked_indices = json.loads(raw)
-            
-            # 파싱 데이터 안정성 검증 후 재배치 실행
-            if isinstance(ranked_indices, list):
-                reranked_docs = []
-                seen_indices = set()
-                
-                # 1. LLM이 우수하다고 1차 판정한 문서들을 순서대로 배치
-                for idx in ranked_indices:
-                    try:
-                        idx_int = int(idx)
-                        if 0 <= idx_int < len(retrieved_docs) and idx_int not in seen_indices:
-                            reranked_docs.append(retrieved_docs[idx_int])
-                            seen_indices.add(idx_int)
-                    except (ValueError, TypeError):
-                        continue
-                
-                # 2. 혹시나 LLM의 응답 누락으로 인해 누락된 문서가 있다면, 
-                #    검색 정밀도가 완전히 망가지는 것을 방지하기 위해 백업용으로 원본 순서대로 뒤에 붙여줍니다.
-                for idx, doc in enumerate(retrieved_docs):
-                    if idx not in seen_indices:
-                        reranked_docs.append(doc)
-                        
-                return reranked_docs
-                
-        # API 오류, 네트워크 연결 지연(Timeout), 잘못된 JSON 포맷 리턴 등 모든 예외 상황을 안전하게 캐치합니다.
+            raw_scores = json.loads(raw)
+
+            def get_score(idx: int) -> float:
+                try:
+                    return float(raw_scores.get(str(idx), 0))
+                except (TypeError, ValueError):
+                    return 0.0
+
+            scored = [(doc, get_score(i)) for i, doc in enumerate(retrieved_docs)]
+            scored.sort(key=lambda pair: pair[1], reverse=True)
+            return scored
+
         except Exception as e:
-            # LLM API 일시적 오류 혹은 파싱 실패 시, 시스템 다운을 막기 위해 
-            # 기존 Vector DB 유사도 원본 순서(Fallback)를 반환하도록 안전 조치합니다.
-            print(f"[Rerank Warning] LLM Reranking 실패: {e}. 안전을 위해 기존 유사도 순서로 검색 결과를 보존하여 서빙합니다.")
-            return retrieved_docs
+            # API 오류, 타임아웃, JSON 파싱 실패 등 모든 예외 상황을 안전하게 캐치한다.
+            # 원본 벡터 유사도 순서를 유지하되, 임계값 로직이 깨지지 않도록 임의의
+            # 내림차순 점수를 부여해 폴백한다.
+            print(f"[Rerank Warning] LLM 채점 실패: {e}. 기존 유사도 순서로 폴백합니다.")
+            n = len(retrieved_docs)
+            return [(doc, float(n - i)) for i, doc in enumerate(retrieved_docs)]
 
-        # 파싱 결과가 정상 리스트가 아닌 경우 등 예상치 못한 흐름에 대비한 최후의 안전장치 백업 리턴입니다.
-        return retrieved_docs
-
-    def retrieve(self, user_query: str, top_k: int = 5, search_limit: int = 15) -> list[dict]:
+    def retrieve(
+        self,
+        user_query: str,
+        top_k: int = 5,
+        search_limit: int = 15,
+        score_threshold: float = DEFAULT_SCORE_THRESHOLD,
+        fallback_k: int = DEFAULT_FALLBACK_K,
+    ) -> list[dict]:
         """
-        [수정사항: 2단계 검색 구조 도입 및 리트리브 핵심 함수 추가]
-        - 기존: `limit=top_k`를 활용하여 처음부터 타이트하게 K개만 가져옴.
-        - 변경: 
-          1단계: `limit=search_limit` (N=15)개 만큼 넉넉하게 긁어와서 질문에 꼭 필요한 핵심 정보가 
-                 포함되도록 우선 확보합니다. (context_recall 향상 및 보존)
-          2단계: `_rerank_with_llm` 메서드를 거치며 알짜배기 순서대로 정렬 및 노이즈 필터링을 수행합니다.
-          3단계: 최종 정렬 완료된 고품질 문서 중 딱 `top_k` (K=5)개만 슬라이싱하여 LLM 생성을 위한 재료로 반환합니다.
+        1단계: search_limit(=15)개를 넉넉히 벡터 검색으로 확보 (recall 확보용)
+        2단계: LLM으로 전 문서에 관련도 점수를 매긴다 (문서 유실 없음)
+        3단계: score_threshold를 넘는 문서만 채택.
+               - 임계값을 넘는 문서가 하나도 없으면, 최상위 fallback_k개만 반환.
+               - top_k는 "이 이상은 안 넘긴다"는 상한선 역할만 한다.
         """
         query_vector = self._embed(user_query)
 
         filter_dict = self._generate_filter(user_query)
         qdrant_filter = self._build_qdrant_filter(filter_dict)
 
-        # 1차 검색 시 search_limit (N) 만큼 여유 있게 확보
         response = self.qdrant.query_points(
             collection_name=self.collection_name,
             query=query_vector,
@@ -214,12 +219,16 @@ class QdrantRetriever:
             results = response.points
 
         formatted_results = [self._format_result(r) for r in results]
+        if not formatted_results:
+            return []
 
-        # 2차 검색 정렬: LLM을 이용해 랭킹 재배정 수행
-        reranked_results = self._rerank_with_llm(user_query, formatted_results)
+        scored_results = self._score_with_llm(user_query, formatted_results)
 
-        # 최종 사용 용도에 맞는 top_k (K)개 만큼만 슬라이싱하여 반환
-        return reranked_results[:top_k]
+        passed = [doc for doc, score in scored_results if score >= score_threshold]
+        if not passed:
+            passed = [doc for doc, _ in scored_results[:fallback_k]]
+
+        return passed[:top_k]
 
     def _format_result(self, r) -> dict:
         """LangChain QdrantVectorStore의 중첩 payload(page_content + metadata)를
@@ -252,12 +261,11 @@ if __name__ == "__main__":
         collection_name="guidance_vectordb",
     )
 
-    # top_k=5로 최종 출력하지만, 내부적으로는 15개(search_limit)를 먼저 가져온 후
-    # gpt-4o가 질문과의 실질적 관련성이 높은 5개만 정렬하여 최종 반환합니다.
-    print(">>> Qdrant에서 관련 문서를 검색하고 LLM Reranking을 진행 중입니다...")
+    # top_k=5는 상한선일 뿐, 실제 반환 개수는 score_threshold를 넘는 문서 수에 따라 달라진다.
+    print(">>> Qdrant에서 관련 문서를 검색하고 LLM 채점 기반 재랭킹을 진행 중입니다...")
     results = retriever.retrieve("2026년도 초급간부 휴가 관련 규정 알려줘", top_k=5, search_limit=15)
-    
-    print(f"\n===== [LLM Rerank 완료] 총 {len(results)}개의 결과가 반환되었습니다 =====\n")
+
+    print(f"\n===== [재랭킹 완료] 총 {len(results)}개의 결과가 반환되었습니다 =====\n")
     for i, r in enumerate(results):
         print(f"[{i+1}위 / {r['type']}] page={r['page']} score={r['score']:.4f}")
         print(r["text"][:150])
