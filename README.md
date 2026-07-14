@@ -70,6 +70,39 @@
 ## 3. 프로젝트 구조 📂 (미정)
 
 ```text
+SKN31-3RD-2TEAM/
+│
+├── app/
+│   ├── streamlit/
+│   │   └── config.toml            # Streamlit 설정
+│   ├── services/                  # UI ↔ Backend 연동 서비스
+│   ├── state/                     # 대화 상태 및 세션 관리
+│   ├── ui/                        # 채팅 화면 및 UI 컴포넌트
+│   └── app.py                     # Streamlit 메인 실행 파일
+│
+├── backend/
+│   ├── graphdb_retriever.py       # Neo4j 기반 법령 Retriever
+│   ├── run_chatbot.py             # create_agent 기반 RAG Agent
+│   ├── tools.py                   # LangChain Tool 정의
+│   └── vectordb_retriever.py      # Qdrant 기반 문서 Retriever
+│
+├── data/                          # 원본 PDF 및 데이터
+│
+├── datasetLoaderScript/
+│   ├── guidance_loader.ipynb      # 병영생활 길라잡이 → Qdrant 적재
+│   └── law_pdfs_to_neo4j_pipeline.ipynb
+│                                  # 법령 PDF → Neo4j 그래프 구축
+│
+├── evaluation/
+│   ├── rag_evaluation.ipynb       # RAG 성능 평가
+│   └── rag_testset.csv            # 평가 데이터셋
+│
+├── image/                         # README 이미지
+│
+├── .env                           # 환경 변수
+├── .gitignore                     # Git 제외 파일 설정
+├── Execute.bat                    # 프로젝트 실행 스크립트
+└── README.md                      # 프로젝트 설명
 ```
 ---
 
