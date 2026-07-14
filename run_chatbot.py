@@ -15,6 +15,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 
 from tools import search_law_knowledge_graph, search_guidance_knowledge_base
+from langchain_core.messages import ToolMessage
 
 load_dotenv()
 
@@ -112,7 +113,7 @@ class LangGraphChatbot:
             
             # 1. State 메시지들을 돌면서 도구(Tool)가 반환한 결과만 쏙쏙 추출
             for m in result["messages"]:
-                if getattr(m, "type", None) == "tool" or m.__class__.__name__ == "ToolMessage":
+                if isinstance(m, ToolMessage) or getattr(m, "type", None) == "tool":
                     # 도구가 반환한 원본 텍스트 내용 저장
                     references.append(m.content)
 
