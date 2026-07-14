@@ -1,6 +1,6 @@
 """백엔드(run_chatbot.LangGraphChatbot) 연결 브리지.
 
-- 백엔드 파일(run_chatbot.py / graphdb_retriever.py / vectordb_retriever.py)은
+- 백엔드 파일(run_chatbot.py)은
   이 프로젝트 루트에 그대로 있고, 여기서는 '수정 없이' 임포트해서 쓴다.
 - bot.ask() 대신 workflow.invoke()를 직접 호출해 최종 state 전체를 받는다.
   → answer뿐 아니라 source(neo4j/qdrant), search_data(실제 검색된 근거)까지
@@ -27,9 +27,10 @@ _EVIDENCE_RE = re.compile(r"\[\s*근거\s*:\s*(.+?)\s*\]\s*$", re.DOTALL)
 
 _d = os.path.dirname(os.path.abspath(__file__))
 while _d != os.path.dirname(_d):  # 파일시스템 최상단까지
-    if os.path.exists(os.path.join(_d, "run_chatbot.py")):
-        if _d not in sys.path:
-            sys.path.insert(0, _d)
+    _backend = os.path.join(_d, "backend")
+    if os.path.exists(os.path.join(_backend, "run_chatbot.py")):
+        if _backend not in sys.path:
+            sys.path.insert(0, _backend)
         break
     _d = os.path.dirname(_d)
 
