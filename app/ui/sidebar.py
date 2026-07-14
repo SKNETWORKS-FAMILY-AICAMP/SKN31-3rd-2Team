@@ -22,14 +22,14 @@ def render() -> None:
         # 2. 법률 질문 (버튼 클릭 시 챗봇으로 질문 전달)
         _eyebrow(f"법률 질문 · {rank}")
         for i, q in enumerate(LEGAL_QUESTIONS.get(rank, [])):
-            if st.button(f"› {q}", key=f"legal_{rank}_{i}"):
+            if st.button(f"› {q}", key=f"legal_{rank}_{i}", use_container_width=True):
                 ss.pending_question = q
 
         # 3. 자주 묻는 질문 (기존 FAQ 유지)
         _eyebrow("자주 묻는 질문 · FAQ")
         for i, q in enumerate(FAQS.get(rank, [])):
-            if st.button(f"› {q}", key=f"faq_{rank}_{i}"):
-                ss.pending_question = q
+            if st.button(f"› {q}", key=f"faq_{rank}_{i}", use_container_width=True):
+               ss.pending_question = q
 
         st.divider()
         if st.button("⟳ 새 대화 시작", key="new_chat", use_container_width=True):
