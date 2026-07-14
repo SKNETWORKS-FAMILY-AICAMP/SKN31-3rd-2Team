@@ -14,6 +14,19 @@ def _esc(text: str) -> str:
     return html.escape(text or "").replace("\n", "<br>")
 
 
+def _no_blank_lines(s: str) -> str:
+    """빈 줄(공백만 있는 줄 포함)을 제거.
+
+    src_badge/refs_block/note처럼 값이 없을 때 "" 로 채워지는 자리가
+    템플릿 안에서 빈 줄이 되면, 마크다운이 그 지점에서 raw HTML 블록을
+    끊어버리고 이후 내용을 들여쓰기 코드블록(문자 그대로 표시)으로
+    오인하는 문제가 있다. (Neo4j/Qdrant 근거가 없는 질문에서 답변이
+    HTML 태그째로 화면에 새어나오던 버그의 원인)
+    빈 줄을 없애 HTML 블록이 끊기지 않게 한다.
+    """
+    return "\n".join(line for line in s.split("\n") if line.strip() != "")
+
+
 def topbar() -> None:
     st.markdown(
         """
@@ -49,13 +62,13 @@ def user_bubble(text: str) -> str:
 
 
 def _refs_html(refs: list[dict], evidence_line: str | None) -> str:
-    if not refs and not evidence_line:
+    # 실제 검색된 문서(refs)가 있을 때만 블록을 표시한다.
+    if not refs:
         return ""
     pills = []
-    if evidence_line:
-        pills.append(
-            f'<span class="pill law"><span class="t">근거</span>{_esc(evidence_line)}</span>'
-        )
+    # 주: evidence_line("근거 …" pill)은 LLM이 답변 끝에 쓴 [근거:] 줄에서
+    # 온 것으로, 실제 검색된 문서가 아니므로 표시하지 않는다.
+    # (LAW/PDF pill = Qdrant/Neo4j 검색 결과만 근거로 표기)
     for r in refs:
         cls = "pdf" if r.get("tag") == "PDF" else "law"
         pills.append(
@@ -96,7 +109,7 @@ def bot_bubble(msg: dict, mode_code: str) -> str:
     refs_block = _refs_html(msg.get("refs") or [], msg.get("evidence_line"))
     note = ""
 
-    return f"""
+    return _no_blank_lines(f"""
 <div class="msg">
   <div class="avatar bot">박</div>
   <div class="bubble">
@@ -110,4 +123,4 @@ def bot_bubble(msg: dict, mode_code: str) -> str:
     {note}
   </div>
 </div>
-"""
+""")
