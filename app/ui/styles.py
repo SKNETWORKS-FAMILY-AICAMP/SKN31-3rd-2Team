@@ -80,6 +80,8 @@ header[data-testid="stHeader"]{background:transparent;}
 }
 [data-testid="stSidebar"] .stButton button:hover{background:#2B352F}
 
+
+
 /* 긴급 신고 블록 */
 .report{border:1.5px solid var(--red-soft);background:rgba(217,56,56,.18);padding:12px 13px;margin-top:10px;}
 .report .rt{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:800;color:var(--red-soft)!important;margin-bottom:6px;}
