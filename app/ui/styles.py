@@ -44,7 +44,7 @@ CSS = """
   background-color:var(--paper);
 }
 header[data-testid="stHeader"]{background:transparent;}
-.block-container{padding-top:0.8rem;padding-bottom:6.5rem;max-width:1050px;}
+.block-container{padding-top:0.8rem;padding-bottom:6.5rem;max-width:1200px;}
 
 /* ---------- 사이드바: 프레시 아미 그린 ---------- */
 [data-testid="stSidebar"]{
@@ -53,8 +53,8 @@ header[data-testid="stHeader"]{background:transparent;}
 }
 [data-testid="stSidebar"] *{color:#B4C5B0;} 
 [data-testid="stSidebar"] .eyebrow{
-  font-size:14px;letter-spacing:.24em;color:#DCE4DE!important;
-  font-weight:700;display:flex;align-items:center;gap:8px;margin:6px 0 2px;
+  font-size:12.5px;letter-spacing:.2em;color:#DCE4DE!important;
+  font-weight:700;display:flex;align-items:center;gap:8px;margin:8px 0 1px;
 }
 [data-testid="stSidebar"] .eyebrow::after{content:"";flex:1;height:1px;background:#DCE4DE;}
 
@@ -71,7 +71,7 @@ header[data-testid="stHeader"]{background:transparent;}
   background:var(--amber);border-color:var(--amber);color:var(--shell);font-weight:700;
 }
 [data-testid="stSidebar"] .stButton{
-  margin-bottom:-6px;   /* 값이 작을수록 촘촘. 0~6px 사이로 조절 */
+  margin-bottom:-14px;   /* 더 촘촘하게 */
 }
 [data-testid="stSidebar"] .stButton button{
   width:100%;text-align:left;justify-content:flex-start;
@@ -107,16 +107,27 @@ header[data-testid="stHeader"]{background:transparent;}
   background:var(--amber);padding:3px 10px;font-weight:700;
 }
 
-/* ---------- 메시지 버블 ---------- */
-.msg{display:flex;gap:12px;max-width:860px;margin-bottom:16px;}
-.msg.user{margin-left:auto;flex-direction:row-reverse;max-width:640px;}
-.avatar{
-  width:34px;height:34px;flex:none;display:grid;place-items:center;
-  font-size:11.5px;font-weight:900;
+/* ---------- 채팅 카드 (배경 위에 흰 카드처럼 떠 있는 대화 영역) ---------- */
+.chatcard{
+  background:var(--paper-2);
+  border:1px solid var(--paper-line);
+  border-radius:16px;
+  padding:24px 26px;
+  box-shadow:0 6px 24px rgba(26,36,33,.06);
+  margin:4px 0 8px;
 }
+
+/* ---------- 메시지 버블 ---------- */
+.msg{display:flex;gap:12px;max-width:100%;margin-bottom:16px;align-items:flex-start;}
+.msg.user{margin-left:auto;flex-direction:row-reverse;max-width:80%;}
+.avatar{
+  width:80px;height:80px;flex:none;display:grid;place-items:center;
+  font-size:16px;font-weight:900;border-radius:50%;overflow:hidden;
+}
+.avatar-img{width:100%;height:100%;object-fit:cover;display:block;}
 .avatar.bot{background:var(--od);color:var(--amber-soft);}
 .avatar.me{background:var(--paper-2);color:var(--ink);border: 1px solid var(--paper-line);}
-.bubble{border:1px solid var(--paper-line);background:var(--paper-2);flex:1;min-width:0;}
+.bubble{border:1px solid var(--paper-line);background:var(--paper-2);flex:1;min-width:0;border-radius:12px;overflow:hidden;}
 .msg.user .bubble{background:var(--od);border-color:var(--od-line);}
 .msg.user .b-body{color:var(--paper-2);}
 .b-head{display:flex;align-items:center;gap:9px;background:var(--paper-line);padding:5px 12px;flex-wrap:wrap;}
@@ -125,7 +136,19 @@ header[data-testid="stHeader"]{background:transparent;}
 .badge{font-size:10px;font-weight:800;letter-spacing:.05em;padding:1px 8px;color:#fff;}
 .badge.src{background:var(--green-ok);}
 .badge.err{background:var(--red);}
-.b-body{padding:13px 15px;font-size:13.5px;line-height:1.65;color:var(--ink);white-space:pre-wrap;word-break:break-word;}
+.b-body{padding:14px 16px;font-size:15.5px;line-height:1.7;color:var(--ink);white-space:pre-wrap;word-break:break-word;}
+.b-body strong{font-weight:800;}
+
+/* ---------- 로딩(대기) 버블 ---------- */
+.loading .b-body{display:flex;align-items:center;gap:10px;color:var(--ink-soft);}
+.loading .dots{display:inline-flex;gap:4px;}
+.loading .dots i{
+  width:7px;height:7px;border-radius:50%;background:var(--khaki-dim);
+  display:inline-block;animation:blink 1.2s infinite both;
+}
+.loading .dots i:nth-child(2){animation-delay:.2s;}
+.loading .dots i:nth-child(3){animation-delay:.4s;}
+@keyframes blink{0%,80%,100%{opacity:.25;}40%{opacity:1;}}
 
 /* 근거 pill */
 .refs{border-top:1px dashed var(--paper-line);padding:9px 15px 11px;}
@@ -162,13 +185,13 @@ header[data-testid="stHeader"]{background:transparent;}
 
 /* ---------- 채팅 입력 ---------- */
 /* ① 바깥 컨테이너 */
-[data-testid="stChatInput"] > div{border-radius:0 !important;border-color:var(--paper-line)}
+[data-testid="stChatInput"] > div{border-radius:14px !important;border-color:var(--paper-line)}
 [data-testid="stChatInput"] > div:focus-within{border-color:var(--paper-line) !important;}
 /* ② 안쪽 BaseWeb 입력 요소 */
 [data-testid="stChatInput"] [data-baseweb="textarea"],
-[data-testid="stChatInput"] [data-baseweb="base-input"]{border-radius:0 !important;}
+[data-testid="stChatInput"] [data-baseweb="base-input"]{border-radius:14px !important;}
 [data-testid="stChatInput"] [data-baseweb="textarea"]:focus-within{box-shadow:none !important;}
-[data-testid="stBottomBlockContainer"]{max-width:1050px;margin-left:auto;margin-right:auto;}
+[data-testid="stBottomBlockContainer"]{max-width:1200px;margin-left:auto;margin-right:auto;}
 
 /* ---------- 시작화면 (병사/간부 선택) ---------- */
 .ws-hero{text-align:center;margin:32px auto 26px;max-width:640px;}
