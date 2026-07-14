@@ -59,9 +59,27 @@ _TOOL_SOURCE = {
 _LAW_LINE_RE = re.compile(r"\[조문\]\s*(?P<name>.*?)\s*\(ID:\s*(?P<id>.*?)\)")
 
 
+def _current_turn_messages(messages) -> list:
+    """이번 턴(마지막 사용자 질문 이후)에 새로 생긴 메시지만 골라낸다.
+
+    백엔드가 InMemorySaver + thread_id로 대화 메모리를 유지하기 때문에,
+    result["messages"]에는 이전 질문들의 도구(ToolMessage) 결과까지 모두
+    쌓여 있다. 전체를 훑으면 이전 턴의 근거 pill(예: 직전 법령 조문)이
+    이번 답변에 섞여 나온다.
+    → 마지막 HumanMessage의 위치를 찾아 그 '이후' 메시지만 반환한다.
+    """
+    last_human = -1
+    for i, m in enumerate(messages):
+        is_human = getattr(m, "type", None) == "human" or m.__class__.__name__ == "HumanMessage"
+        if is_human:
+            last_human = i
+    return messages[last_human + 1:] if last_human >= 0 else list(messages)
+
+
 def _refs_from_messages(messages) -> tuple[str | None, list[dict]]:
     """에이전트 메시지에서 (출처, 근거 pill 목록)을 파생.
 
+    - 이번 턴에 새로 생긴 도구 메시지만 대상으로 한다(이전 턴 근거 누적 방지).
     - 어떤 @tool이 호출됐는지로 출처(neo4j/qdrant)를 판별.
     - 법령 도구 출력의 '[조문] 이름 (ID:...)' 헤더를 파싱해 조문 pill 생성.
     - 길라잡이 도구는 현재 text만 반환하므로 '참조 문서 N' 단위 pill로만 표기.
@@ -69,7 +87,7 @@ def _refs_from_messages(messages) -> tuple[str | None, list[dict]]:
     source: str | None = None
     refs: list[dict] = []
 
-    for m in messages:
+    for m in _current_turn_messages(messages):
         is_tool = getattr(m, "type", None) == "tool" or m.__class__.__name__ == "ToolMessage"
         if not is_tool:
             continue
@@ -90,7 +108,6 @@ def _refs_from_messages(messages) -> tuple[str | None, list[dict]]:
                 refs.append({"tag": "PDF", "label": f"길라잡이 참조 {i}"})
 
     return source, refs
-
 
 def _fake_response(question: str) -> dict[str, Any]:
     """MLA_FAKE_BACKEND=1 전용. 화면 확인용 샘플이며 실제 규정 정보가 아님."""
