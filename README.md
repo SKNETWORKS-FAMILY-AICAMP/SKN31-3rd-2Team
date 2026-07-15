@@ -135,7 +135,9 @@ SKN31-3RD-2TEAM/ 📁
 
 ---
 
-## 8. 설치
+## 8. 사용 방법
+
+## 8.1 설치
 
 ```bash
 cd psych_med_chatbot
@@ -155,7 +157,28 @@ pip install -r requirements.txt
 
 ---
 
-### 실행 (Windows)
+
+## 8.2 Data Indexing
+
+### Neo4j
+
+```bash
+code law_pdfs_to_neo4j_pipeline.ipynb
+```
+
+모든 셀을 순서대로 실행하여 Neo4j에 데이터를 적재합니다.
+
+### Qdrant
+
+```bash
+code guidance_loader.ipynb
+```
+
+모든 셀을 순서대로 실행하여 Qdrant에 데이터를 적재합니다.
+
+---
+
+### 8.3 실행 (Windows)
 
 아래 내용을 `run.bat` 파일로 저장한 후 실행하면 Streamlit이 자동으로 실행됩니다.
 
@@ -184,27 +207,42 @@ pause
 > 
 > - 애플리케이션이 정상 실행되면 브라우저에서 Streamlit 페이지가 자동으로 열립니다. 
 
-## 8.1 Data Indexing
 
-### Neo4j
+## 9. 평가 실행 
 
-```bash
-code law_pdfs_to_neo4j_pipeline.ipynb
-```
+RAG 성능 평가는 `evaluation/rag_evaluation.ipynb`에서 수행합니다.
 
-모든 셀을 순서대로 실행하여 Neo4j에 데이터를 적재합니다.
+### 1. 사전 준비
 
-### Qdrant
+- `.env` 파일에 OpenAI API Key 및 DB 정보를 설정합니다.
 
-```bash
-code guidance_loader.ipynb
-```
+- Neo4j와 Qdrant 서버를 실행합니다.
+- 법령 데이터와 길라잡이 데이터를 각각 Neo4j와 Qdrant에 적재합니다.
 
-모든 셀을 순서대로 실행하여 Qdrant에 데이터를 적재합니다.
+### 2. 평가 실행
+
+`evaluation/rag_evaluation.ipynb`를 실행합니다.
+
+평가 과정은 다음 순서로 진행됩니다.
+
+1. 평가용 질문(Testset) 로드
+2. 챗봇(RAG Agent) 호출
+3. 검색 문서(Retrieval Context) 수집
+4. 생성 답변(Response) 생성
+5. RAGAS 지표 계산
+
+### 3. 평가 지표
+
+- Faithfulness
+- Answer Relevancy
+- Context Precision
+- Context Recall
+
+평가 결과는 각 질문별 점수와 전체 평균 점수로 확인할 수 있습니다.
 
 ---
 
-## 9. 회고
+## 10. 회고
 #### 박동관
  - 이번 프로젝트를 통해 군 법령 데이터와 군생활 팁 데이터를 수집하고, 데이터의 특성에 맞게 청킹하는 과정을 수행하였다. 또한 각 데이터의 특성을 고려하여 구조적 관계를 활용하는 정보는 Neo4j에, 의미 기반 검색에 적합한 정보는 Qdrant에 저장하는 RAG 파이프라인을 직접 구축해 볼 수 있었다.
 이후 각 데이터베이스를 참조하여 필요한 정보를 검색하는 Retriever를 구현하고, 이를 Tool 형태로 변환하여 Agent와 연동함으로써 LLM 기반 챗봇의 전체 동작 흐름을 설계하고 구현하는 경험을 쌓았다. 단순히 RAG를 사용하는 것에 그치지 않고, 데이터 저장부터 검색, Tool 연동, Agent 기반 응답 생성까지 전체 파이프라인을 직접 구성해 보면서 RAG 시스템의 구조와 동작 원리를 깊이 이해할 수 있었던 의미 있는 프로젝트였다.
