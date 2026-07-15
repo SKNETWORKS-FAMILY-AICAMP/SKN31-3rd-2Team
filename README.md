@@ -15,7 +15,7 @@
 | Phase | Task | Owner |
 |:---:|:---|:---:|
 | 🟢 | 주제 선정 | 박동관 |
-| 🟢 | 데이터 확보 및 청킹 | 이용혁, 박동관 |
+| 🟢 | 데이터 확보 및 청킹 | 박동관, 이용혁 |
 | 🔵 | Neo4j · Qdrant Retriever 구현 | 박동관 |
 | 🔵 | 메모리(단기기억) 및 페르소나 구현 | 김세희, 박동관 |
 | 🔵 | 그래프 구조 및 라우팅 개선 | 전서연, 박동관, 김세희 |
@@ -23,7 +23,7 @@
 | 🟣 | 모델 평가 | 이용혁, 박동관 |
 | 🟣 | README 작성 | 김세희, 전서연 |
 | 🟣 | 산출물 작성 | 김세희, 전서연 |
-| 🟣 | 발표 준비 | 전체 |
+| 🟣 | 발표 준비 | 박동관, 김세희 |
 
 ---
 
@@ -64,7 +64,7 @@
 |:---|:---|
 | Language | ![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white) |
 | Frontend | ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat-square&logo=streamlit&logoColor=white) |
-| AI | ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white) ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square&logo=langchain&logoColor=white) ![LangGraph](https://img.shields.io/badge/LangGraph-111111?style=flat-square) |
+| AI / Evaluation | ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white) ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square&logo=langchain&logoColor=white) ![LangGraph](https://img.shields.io/badge/LangGraph-111111?style=flat-square) ![Ragas](https://img.shields.io/badge/Ragas-02A884?style=flat-square) |
 | Database | ![Qdrant](https://img.shields.io/badge/Qdrant-DC244C?style=flat-square&logo=qdrant&logoColor=white) ![Neo4j](https://img.shields.io/badge/Neo4j-4581C3?style=flat-square&logo=neo4j&logoColor=white) |
 | Libraries | ![PyMuPDF](https://img.shields.io/badge/PyMuPDF-2C8EBB?style=flat-square&logo=adobeacrobatreader&logoColor=white) ![pdfplumber](https://img.shields.io/badge/pdfplumber-555555?style=flat-square&logo=adobeacrobatreader&logoColor=white) 
 
@@ -111,24 +111,31 @@ SKN31-3RD-2TEAM/
 ```
 ---
 
-## 4. 데이터 파이프라인
+## 4. 시스템 아키텍처
+
+• [⌜시스템 아키텍처⌟](산출물/시스템_아키텍처.md)에서 자세히 보기
+<img src="images/시스템_아키텍처.png">
+
+---
+
+## 5. 데이터 파이프라인
 
 • [⌜데이터 수집 및 전처리⌟](산출물/데이터_수집_및_전처리.md)에서 자세히 보기
 <img src="images/데이터_파이프라인.png">
 
 ---
 
-## 5. 실행 파이프라인
-
-• [⌜시스템 아키텍처⌟](산출물/시스템_아키텍처.md)에서 자세히 보기
+## 6. 실행 파이프라인
 <img src="images/실행_파이프라인.png">
 
 ---
 
-## 6. RAG 평가
+## 7. RAG 평가
+• [⌜RAG 평가⌟](산출물/RAG_평가.md)에서 자세히 보기
 
+---
 
-## 7.1 설치
+## 8. 설치
 
 ```bash
 cd psych_med_chatbot
@@ -177,7 +184,7 @@ pause
 > 
 > - 애플리케이션이 정상 실행되면 브라우저에서 Streamlit 페이지가 자동으로 열립니다. 
 
-## 7.2 Data Indexing
+## 8.2 Data Indexing
 
 ### Neo4j
 
@@ -197,23 +204,15 @@ code guidance_loader.ipynb
 
 ---
 
-
----
-
-## 8. 회고
-
-## 6. 수행 결과
-
----
-
-## 7. 회고
+## 9. 회고
 #### 박동관
  - 이번 프로젝트를 통해 군 법령 데이터와 군생활 팁 데이터를 수집하고, 데이터의 특성에 맞게 청킹하는 과정을 수행하였다. 또한 각 데이터의 특성을 고려하여 구조적 관계를 활용하는 정보는 Neo4j에, 의미 기반 검색에 적합한 정보는 Qdrant에 저장하는 RAG 파이프라인을 직접 구축해 볼 수 있었다.
 이후 각 데이터베이스를 참조하여 필요한 정보를 검색하는 Retriever를 구현하고, 이를 Tool 형태로 변환하여 Agent와 연동함으로써 LLM 기반 챗봇의 전체 동작 흐름을 설계하고 구현하는 경험을 쌓았다. 단순히 RAG를 사용하는 것에 그치지 않고, 데이터 저장부터 검색, Tool 연동, Agent 기반 응답 생성까지 전체 파이프라인을 직접 구성해 보면서 RAG 시스템의 구조와 동작 원리를 깊이 이해할 수 있었던 의미 있는 프로젝트였다.
 
 #### 고현아
-  - 이번 프로젝트에서 온전히 프론트엔드를 맡게 되어, 낯선 연동 작업 등 여러 어려움과 시행착오가 있었습니다.
-하지만 다음 홈페이지 구축 프로젝트를 앞두고 프론트엔드를 미리 직접 다뤄볼 수 있었던 덕분에, 앞으로의 과정도 거뜬히 잘 해낼 수 있다는 강한 자신감을 얻었습니다.
+  - 이번 프로젝트에서 늘 다루던 백엔드를 벗어나 처음으로 프론트엔드(Streamlit)를 온전히 전담하게 되었습니다.
+초기 디자인 기획부터 화면 구현까지 백지상태에서 시작하다 보니 막막함도 있었지만, 팀원들의 다양한 의견을 수용하고 그것을 실제 화면에 즉각적으로 적용해 나가는 과정이  새로웠습니다.  특히 개발 도중 백엔드의 로직이나 구조가 변경될 때마다, 프론트엔드 역시 그에 맞춰 유기적으로 코드를 수정하고 대응해야 하는 과정이 결코 쉽지 않았지만  수많은 시행착오를 끈질기게 해결하며 마침내 성공적으로 결과물을 완성해 냈을 때 잊지 못할 큰 성취감을 느꼈습니다.
+다음 홈페이지 구축을 앞두고 프론트엔드 설계와 흐름을 미리 체득한 덕분에, 앞으로의 프로젝트도 성공적으로 이끌 수 있다는 확신을 얻은 값진 경험이었습니다. 
 
 #### 김세희
  - 이번 프로젝트에서 데이터 성격에 따라 어울리는 도구를 알맞게 나누어 넣는 방법을 알게 되어 좋았고, 챗봇에 중요한 단기기억 코드를 직접 짜면서 챗봇이 어떻게 작동하는지 배울 수 있어서 뿌듯했습니다. 그리고 팀원들의 이번 프로에서 좀 더 용기내서 다양한 경험을 할 수 있어서 좋았고, 앞으로도 더 도전해 볼 자신감이 생겼습니다.
