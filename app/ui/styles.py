@@ -138,8 +138,32 @@ header[data-testid="stHeader"]{background:transparent;}
 .badge{font-size:10px;font-weight:800;letter-spacing:.05em;padding:1px 8px;color:#fff;}
 .badge.src{background:var(--green-ok);}
 .badge.err{background:var(--red);}
-.b-body{padding:14px 16px;font-size:15.5px;line-height:1.7;color:var(--ink);white-space:pre-wrap;word-break:break-word;}
+.b-body{padding:14px 16px;font-size:15.5px;line-height:1.7;color:var(--ink);white-space:normal;word-break:break-word;}
 .b-body strong{font-weight:800;}
+
+/* 답변 본문 마크다운 요소 */
+.b-body h1,.b-body h2,.b-body h3,.b-body h4{
+  font-weight:800;color:var(--ink);line-height:1.35;
+  margin:14px 0 6px;
+}
+.b-body h1{font-size:19px;}
+.b-body h2{font-size:17.5px;}
+.b-body h3{font-size:16.5px;}
+.b-body h4{font-size:15.5px;}
+.b-body h1:first-child,.b-body h2:first-child,
+.b-body h3:first-child,.b-body h4:first-child{margin-top:0;}
+.b-body p{margin:0 0 8px;}
+.b-body p:last-child{margin-bottom:0;}
+.b-body ul,.b-body ol{margin:6px 0 8px;padding-left:22px;}
+.b-body li{margin-bottom:3px;}
+.b-body code{
+  background:var(--paper);border:1px solid var(--paper-line);
+  border-radius:4px;padding:1px 5px;font-size:13px;
+}
+.b-body table{border-collapse:collapse;margin:8px 0;font-size:14px;}
+.b-body th,.b-body td{border:1px solid var(--paper-line);padding:5px 9px;}
+.b-body th{background:var(--paper);font-weight:700;}
+.b-body a{color:var(--green-ok);text-decoration:underline;}
 
 /* ---------- 로딩(대기) 버블 ---------- */
 .loading .b-body{display:flex;align-items:center;gap:10px;color:var(--ink-soft);}
