@@ -124,6 +124,83 @@ SKN31-3RD-2TEAM/
 
 ---
 
+## 6. RAG 평가
+
+
+## 7.1 설치
+
+```bash
+cd psych_med_chatbot
+
+python -m venv .venv
+
+.\.venv\Scripts\activate
+
+pip install -r requirements.txt
+```
+
+가상환경이 생성되면 프로젝트 루트에 **`.venv`** 폴더가 생성됩니다.
+
+필요한 패키지는 `requirements.txt`를 통해 한 번에 설치됩니다.
+
+설치가 완료되면 프로젝트 루트에 있는 **`.venv`** 가상환경을 사용하여 애플리케이션을 실행합니다.
+
+---
+
+### 실행 (Windows)
+
+아래 내용을 `run.bat` 파일로 저장한 후 실행하면 Streamlit이 자동으로 실행됩니다.
+
+```bat
+@echo off
+
+:: 1. 배치 파일이 있는 프로젝트 최상위 폴더로 이동
+cd /d "%~dp0"
+
+:: 2. 프로젝트의 가상환경(.venv)을 사용하여 Streamlit 실행
+.\.venv\Scripts\python.exe -m streamlit run app/app.py
+
+pause
+```
+
+또는 터미널에서 직접 아래 명령어를 실행해도 됩니다.
+
+```bash
+.\.venv\Scripts\python.exe -m streamlit run app/app.py
+```
+
+> **참고**
+>
+> - 반드시 프로젝트 루트에 **`.venv`** 가상환경이 생성되어 있어야 합니다.
+> - [⌜requirements.txt 바로가기⌟](requirements.txt) 설치가 완료되지 않은 경우 실행 시 오류가 발생할 수 있습니다. 
+> 
+> - 애플리케이션이 정상 실행되면 브라우저에서 Streamlit 페이지가 자동으로 열립니다. 
+
+## 7.2 Data Indexing
+
+### Neo4j
+
+```bash
+code law_pdfs_to_neo4j_pipeline.ipynb
+```
+
+모든 셀을 순서대로 실행하여 Neo4j에 데이터를 적재합니다.
+
+### Qdrant
+
+```bash
+code guidance_loader.ipynb
+```
+
+모든 셀을 순서대로 실행하여 Qdrant에 데이터를 적재합니다.
+
+---
+
+
+---
+
+## 8. 회고
+
 ## 6. 수행 결과
 
 ---
