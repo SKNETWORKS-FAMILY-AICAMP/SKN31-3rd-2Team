@@ -8,7 +8,7 @@ from openai import OpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
-CHAT_MODEL = "gpt-4o"
+CHAT_MODEL = "gpt-5.4-mini"
 EMBEDDING_MODEL = "text-embedding-3-large"  # 적재할 때 쓴 모델과 반드시 동일해야 함
 
 # 재랭킹 점수(0~10) 임계값 / 임계값을 넘는 문서가 없을 때 반환할 최소 개수

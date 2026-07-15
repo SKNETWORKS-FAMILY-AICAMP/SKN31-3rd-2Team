@@ -1,26 +1,36 @@
 """
-박병장 상담소 - 군 생활 법률·규정 챗봇(create_agent)
+박병장 상담소 - 군 생활 법률·규정 챗봇 (StateGraph 명시적 버전)
 
-- 어떤 도구(법령 Neo4j / 길라잡이 Qdrant)를 쓸지, 재검색이 필요한지, 참조가 필요한지를 에이전트(ReAct)가 스스로 판단.  
-  → 수동 라우팅/채점/재검색 노드 불필요.
-- 검색 도구 : tools.py의 @tool 함수 두 개 사용.
-- 단기 메모리 : InMemorySaver + thread_id로 유지.
+- add_node / add_edge / add_conditional_edges로 그래프를 직접 구성
+- 도구 선택 / 재검색 여부 / 답변 생성은 전부 AI(시스템 프롬프트)가 판단
+- 코드가 강제하는 건 딱 하나: 도구 호출 최대 2회 하드캡 (프롬프트 규칙이 새는 경우 대비 안전장치)
+- 429 rate limit 대응: tenacity로 지수 백오프 재시도
 """
 
 import os
 import sys
+from typing import Annotated, TypedDict
+
 from dotenv import load_dotenv
+from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from langchain.agents import create_agent
-from langchain_openai import ChatOpenAI
+
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import InMemorySaver
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, SystemMessage
+from langchain_openai import ChatOpenAI
 
 from backend.tools import search_law_knowledge_graph, search_guidance_knowledge_base
-from langchain_core.messages import ToolMessage
 
 load_dotenv()
 
-MODEL_NAME = "gpt-4o"
+# =====================================================================
+# 설정
+# =====================================================================
+MODEL_NAME = "gpt-5.4-mini"
+MAX_TOOL_CALLS = 2   # 도구 호출 최대 횟수 하드캡 (프롬프트 규칙 "최대 2회"를 코드로도 강제)
 
 SYSTEM_PROMPT = (""" 
     당신은 군 생활의 모든 법률, 규정, 꼼수까지 마스터한 만렙 에이스 선임 '박병장'입니다.
@@ -83,69 +93,174 @@ SYSTEM_PROMPT = ("""
       - 인사·잡담 등 도구를 쓰지 않은 답변에는 [근거: ...] 줄을 붙이지 마세요."""
 )
 
+# =====================================================================
+# 429 재시도 유틸
+# =====================================================================
+def _is_rate_limit_error(exc: BaseException) -> bool:
+    msg = str(exc)
+    return "429" in msg or "rate_limit" in msg.lower()
 
+
+rate_limit_retry = retry(
+    retry=retry_if_exception(_is_rate_limit_error),
+    wait=wait_random_exponential(min=1, max=60),
+    stop=stop_after_attempt(6),
+    reraise=True,
+)
+
+
+@rate_limit_retry
+def safe_invoke(llm: ChatOpenAI, messages: list) -> AIMessage:
+    """429 발생 시 지수 백오프로 자동 재시도하는 LLM 호출 wrapper."""
+    return llm.invoke(messages)
+
+
+@rate_limit_retry
+def safe_tool_invoke(tool, args: dict):
+    """도구 자체가 내부적으로 LLM/API를 호출해 429가 날 수 있는 경우 대비."""
+    return tool.invoke(args)
+
+
+# =====================================================================
+# LLM 인스턴스
+# =====================================================================
+llm = ChatOpenAI(model=MODEL_NAME, temperature=0)
+
+tools = [search_law_knowledge_graph, search_guidance_knowledge_base]
+tools_by_name = {t.name: t for t in tools}
+llm_with_tools = llm.bind_tools(tools)
+
+
+# =====================================================================
+# State
+# =====================================================================
+class AgentState(TypedDict):
+    messages: Annotated[list, add_messages]
+    question: str
+    references: list[str]
+    tool_call_count: int   # 도구 호출 하드캡을 위한 카운터
+
+
+# =====================================================================
+# 노드
+# =====================================================================
+def agent_node(state: AgentState) -> dict:
+    try:
+        response = safe_invoke(llm_with_tools, state["messages"])
+    except Exception as e:
+        print(f"[Agent Warning] 최종 재시도 실패: {e}")
+        response = AIMessage(content="죄송합니다, 지금 요청이 몰려서 답변이 지연되고 있습니다. 잠시 후 다시 시도해주세요.")
+    return {"messages": [response]}
+
+
+def tools_node(state: AgentState) -> dict:
+    """도구 실행. 판단(어떤 도구/몇 번)은 전부 AI가 하고, 여기선 실행만 담당."""
+    last_msg: AIMessage = state["messages"][-1]
+
+    tool_messages = []
+    new_refs = []
+    for call in last_msg.tool_calls:
+        tool = tools_by_name[call["name"]]
+        try:
+            result = safe_tool_invoke(tool, call["args"])
+        except Exception as e:
+            print(f"[Tool Warning] {call['name']} 실패: {e}")
+            result = "(검색 실패 - 잠시 후 다시 시도 필요)"
+
+        result_str = str(result)
+        new_refs.append(result_str)
+        tool_messages.append(ToolMessage(content=result_str, tool_call_id=call["id"]))
+
+    return {
+        "messages": tool_messages,
+        "references": state.get("references", []) + new_refs,
+        "tool_call_count": state.get("tool_call_count", 0) + len(last_msg.tool_calls),
+    }
+
+
+# =====================================================================
+# 라우팅
+# =====================================================================
+def route_after_agent(state: AgentState) -> str:
+    last_msg = state["messages"][-1]
+    has_tool_calls = bool(getattr(last_msg, "tool_calls", None))
+
+    if not has_tool_calls:
+        return END
+
+    # 하드캡: 이미 MAX_TOOL_CALLS만큼 호출했으면 더 이상 도구로 안 보내고
+    # AI에게 "그만 부르고 지금까지 결과로 답변해라"는 신호만 주고 종료 라우팅
+    if state.get("tool_call_count", 0) >= MAX_TOOL_CALLS:
+        print(f"⚠️ 도구 호출 {MAX_TOOL_CALLS}회 도달 — 추가 호출 무시하고 종료")
+        return END
+
+    return "tools"
+
+
+# =====================================================================
+# 그래프 조립
+# =====================================================================
+graph_builder = StateGraph(AgentState)
+
+graph_builder.add_node("agent", agent_node)
+graph_builder.add_node("tools", tools_node)
+
+graph_builder.add_edge(START, "agent")
+graph_builder.add_conditional_edges(
+    "agent",
+    route_after_agent,
+    {"tools": "tools", END: END},
+)
+graph_builder.add_edge("tools", "agent")
+
+checkpointer = InMemorySaver()
+compiled_graph = graph_builder.compile(checkpointer=checkpointer)
+
+
+# =====================================================================
+# 챗봇 클래스 (인터페이스 동일 유지: bot.ask(...))
+# =====================================================================
 class LangGraphChatbot:
-    """create_agent 기반 박병장 챗봇.
-
-    도구 선택 / 재검색 / 참조 필요 여부 / 답변 생성을 에이전트가 자율 판단(ReAct)하며,
-    tools.py의 @tool 두 개를 그대로 바인딩해 사용한다.
-    """
-
-    def __init__(self, model_name: str = MODEL_NAME, verbose: bool = True):
+    def __init__(self, verbose: bool = True):
         self.verbose = verbose
-        self.tools = [search_law_knowledge_graph, search_guidance_knowledge_base]
-        self.checkpointer = InMemorySaver()
-        self.agent = create_agent(
-            model=ChatOpenAI(model=model_name, temperature=0),
-            tools=self.tools,
-            system_prompt=SYSTEM_PROMPT,
-            checkpointer=self.checkpointer,  # thread_id 별 단기 메모리
-        )
+        self.graph = compiled_graph
 
     def ask(self, user_query: str, thread_id: str = "default-thread") -> tuple[list[str], str]:
-            """유저 질문을 받아 (참조문서_리스트, 최종_답변)을 반환합니다."""
-            config = {"configurable": {"thread_id": thread_id}}
-            result = self.agent.invoke(
-                {"messages": [("human", user_query)]},
-                config=config,
-            )
+        config = {"configurable": {"thread_id": thread_id}}
+        initial_state = {
+            "messages": [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=user_query)],
+            "question": user_query,
+            "references": [],
+            "tool_call_count": 0,
+        }
+        result = self.graph.invoke(initial_state, config=config)
 
-            references = []
-            
-            # 1. State 메시지들을 돌면서 도구(Tool)가 반환한 결과만 쏙쏙 추출
-            for m in result["messages"]:
-                if isinstance(m, ToolMessage) or getattr(m, "type", None) == "tool":
-                    # 도구가 반환한 원본 텍스트 내용 저장
-                    references.append(m.content)
+        references = result.get("references", [])
+        final_response = result["messages"][-1].content
 
-            # 2. 가장 마지막 메시지(AI의 최종 대답) 추출
-            final_response = result["messages"][-1].content
+        if self.verbose:
+            print("\n" + "=" * 60)
+            print("📄 [참조 문서 목록 (References)]")
+            print("=" * 60)
+            if references:
+                for i, ref in enumerate(references, 1):
+                    print(f"[{i}번째 검색 결과]\n{ref}")
+                    print("-" * 40)
+            else:
+                print("(참조한 문서 없음 - 잡담 또는 자체 답변)")
+            print("\n" + "=" * 60)
+            print("✨ [최종 Response]")
+            print("=" * 60)
+            print(final_response)
+            print("=" * 60 + "\n")
 
-            # 3. 요청하신 프린트 로직 진행
-            if self.verbose:
-                print("\n" + "="*60)
-                print("📄 [참조 문서 목록 (References)]")
-                print("="*60)
-                if references:
-                    for i, ref in enumerate(references, 1):
-                        print(f"[{i}번째 검색 결과]\n{ref}")
-                        print("-" * 40)
-                else:
-                    print("(참조한 문서 없음 - 잡담 또는 자체 답변)")
-                    
-                print("\n" + "="*60)
-                print("✨ [최종 Response]")
-                print("="*60)
-                print(final_response)
-                print("="*60 + "\n")
+        return references, final_response
 
-            # [참조문서 리스트, 최종 답변] 구조로 리턴
-            return references, final_response
 
 def main():
     bot = LangGraphChatbot()
 
-    print("\n💬 군 생활 법률·규정 챗봇 (박병장) - [create_agent 자율 판단 모드]입니다.")
+    print("\n💬 군 생활 법률·규정 챗봇 (박병장) - [StateGraph 명시 버전]입니다.")
     print("종료하려면 exit를 입력하세요.\n")
 
     thread_id = "console-user-1"
@@ -156,9 +271,7 @@ def main():
         if not user_input:
             continue
 
-        # 함수 리턴 구조가 바뀐 것에 맞춰 unpacking 진행
         references, answer = bot.ask(user_query=user_input, thread_id=thread_id)
-
 
 
 if __name__ == "__main__":
