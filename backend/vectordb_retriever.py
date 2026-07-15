@@ -246,27 +246,28 @@ class QdrantRetriever:
         }
 
 
-# ==========================================
-# [추가 구문] 코드 단독 실행 및 테스트용 진입점
-# ==========================================
-if __name__ == "__main__":
-    load_dotenv()
+##자체실행파일
+# # ==========================================
+# # [추가 구문] 코드 단독 실행 및 테스트용 진입점
+# # ==========================================
+# if __name__ == "__main__":
+#     load_dotenv()
 
-    openai_client = OpenAI()
-    qdrant_client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+#     openai_client = OpenAI()
+#     qdrant_client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
 
-    retriever = QdrantRetriever(
-        client=openai_client,
-        qdrant=qdrant_client,
-        collection_name="guidance_vectordb",
-    )
+#     retriever = QdrantRetriever(
+#         client=openai_client,
+#         qdrant=qdrant_client,
+#         collection_name="guidance_vectordb",
+#     )
 
-    # top_k=5는 상한선일 뿐, 실제 반환 개수는 score_threshold를 넘는 문서 수에 따라 달라진다.
-    print(">>> Qdrant에서 관련 문서를 검색하고 LLM 채점 기반 재랭킹을 진행 중입니다...")
-    results = retriever.retrieve("2026년도 초급간부 휴가 관련 규정 알려줘", top_k=5, search_limit=15)
+#     # top_k=5는 상한선일 뿐, 실제 반환 개수는 score_threshold를 넘는 문서 수에 따라 달라진다.
+#     print(">>> Qdrant에서 관련 문서를 검색하고 LLM 채점 기반 재랭킹을 진행 중입니다...")
+#     results = retriever.retrieve("2026년도 초급간부 휴가 관련 규정 알려줘", top_k=5, search_limit=15)
 
-    print(f"\n===== [재랭킹 완료] 총 {len(results)}개의 결과가 반환되었습니다 =====\n")
-    for i, r in enumerate(results):
-        print(f"[{i+1}위 / {r['type']}] page={r['page']} score={r['score']:.4f}")
-        print(r["text"][:150])
-        print("-" * 50)
+#     print(f"\n===== [재랭킹 완료] 총 {len(results)}개의 결과가 반환되었습니다 =====\n")
+#     for i, r in enumerate(results):
+#         print(f"[{i+1}위 / {r['type']}] page={r['page']} score={r['score']:.4f}")
+#         print(r["text"][:150])
+#         print("-" * 50)
