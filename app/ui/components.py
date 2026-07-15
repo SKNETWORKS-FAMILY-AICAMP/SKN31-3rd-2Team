@@ -21,7 +21,7 @@ def _bot_avatar_src() -> str:
     로컬 경로를 <img src>에 직접 쓰면 브라우저가 못 불러오므로 data URI로 심는다.
     파일이 없으면 "" 반환 → 호출부에서 '박' 텍스트로 폴백.
     """
-    png_path = Path(__file__).resolve().parent.parent.parent / "image" / "park2.png"
+    png_path = Path(__file__).resolve().parent.parent.parent / "images" / "park2.png"
     if png_path.exists():
         data = base64.b64encode(png_path.read_bytes()).decode("ascii")
         return f"data:image/png;base64,{data}"

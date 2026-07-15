@@ -1,10 +1,13 @@
 """백엔드(run_chatbot.LangGraphChatbot) 연결 브리지.
 
 - 백엔드 파일(run_chatbot.py)은
-  이 프로젝트 루트에 그대로 있고, 여기서는 '수정 없이' 임포트해서 쓴다.
-- bot.ask() 대신 workflow.invoke()를 직접 호출해 최종 state 전체를 받는다.
+  backend/ 폴더 안에 그대로 있고, 여기서는 '수정 없이' 임포트해서 쓴다.
+- bot.ask() 대신 bot.agent.invoke()를 직접 호출해 최종 state 전체를 받는다.
   → answer뿐 아니라 source(neo4j/qdrant), search_data(실제 검색된 근거)까지
     화면에 표시할 수 있다.
+- create_agent에 system_prompt가 이미 바인딩되어 있어서, 매 호출마다
+  자동으로 박병장 페르소나가 적용된다. 여기서 SystemMessage를 따로
+  넣을 필요가 없다 (넣으면 오히려 중복).
 - 답변 끝의 "[근거: ...]" 줄은 분리해서 근거 태그로 렌더링한다.
 
 환경변수(.env — 백엔드와 동일):
@@ -61,14 +64,7 @@ _LAW_LINE_RE = re.compile(r"\[조문\]\s*(?P<name>.*?)\s*\(ID:\s*(?P<id>.*?)\)")
 
 
 def _current_turn_messages(messages) -> list:
-    """이번 턴(마지막 사용자 질문 이후)에 새로 생긴 메시지만 골라낸다.
-
-    백엔드가 InMemorySaver + thread_id로 대화 메모리를 유지하기 때문에,
-    result["messages"]에는 이전 질문들의 도구(ToolMessage) 결과까지 모두
-    쌓여 있다. 전체를 훑으면 이전 턴의 근거 pill(예: 직전 법령 조문)이
-    이번 답변에 섞여 나온다.
-    → 마지막 HumanMessage의 위치를 찾아 그 '이후' 메시지만 반환한다.
-    """
+    """이번 턴(마지막 사용자 질문 이후)에 새로 생긴 메시지만 골라낸다."""
     last_human = -1
     for i, m in enumerate(messages):
         is_human = getattr(m, "type", None) == "human" or m.__class__.__name__ == "HumanMessage"
@@ -78,13 +74,7 @@ def _current_turn_messages(messages) -> list:
 
 
 def _refs_from_messages(messages) -> tuple[str | None, list[dict]]:
-    """에이전트 메시지에서 (출처, 근거 pill 목록)을 파생.
-
-    - 이번 턴에 새로 생긴 도구 메시지만 대상으로 한다(이전 턴 근거 누적 방지).
-    - 어떤 @tool이 호출됐는지로 출처(neo4j/qdrant)를 판별.
-    - 법령 도구 출력의 '[조문] 이름 (ID:...)' 헤더를 파싱해 조문 pill 생성.
-    - 길라잡이 도구는 현재 text만 반환하므로 '참조 문서 N' 단위 pill로만 표기.
-    """
+    """에이전트 메시지에서 (출처, 근거 pill 목록)을 파생."""
     source: str | None = None
     refs: list[dict] = []
 
@@ -137,14 +127,7 @@ def ask_bot(
     thread_id: str,
     top_k: int = 3,
 ) -> dict[str, Any]:
-    """질문을 백엔드 봇에 보내고 화면 렌더링용 dict를 반환.
-
-    질문 앞에 신분/분야 태그를 붙이는 이유:
-    - GENERATE_PROMPT(박병장)가 질문자 신분(간부 vs 병사)에 따라 말투를 바꾸므로,
-      사이드바에서 고른 계급을 봇이 알 수 있게 전달한다.
-    - 카테고리는 검색·답변의 초점을 좁히는 힌트가 된다.
-    반환: {ok, answer, evidence_line, source, needs_reference, refs} 또는 {ok:False, error}
-    """
+    """질문을 백엔드 봇에 보내고 화면 렌더링용 dict를 반환."""
     if os.getenv("MLA_FAKE_BACKEND") == "1":
         return _fake_response(question)
 
@@ -159,6 +142,8 @@ def ask_bot(
         user_query = " ".join(tags) + " " + question
 
         config = {"configurable": {"thread_id": thread_id}}
+        # create_agent가 system_prompt를 자동으로 매 호출마다 적용해주므로
+        # 여기서는 사용자 메시지만 넘기면 된다.
         result = bot.agent.invoke(
             {"messages": [HumanMessage(content=user_query)]},
             config=config,
