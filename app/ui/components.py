@@ -7,6 +7,8 @@ import html
 
 import streamlit as st
 
+import markdown as _md
+
 import base64
 import functools
 from pathlib import Path
@@ -48,15 +50,31 @@ def _esc(text: str) -> str:
     return html.escape(text or "").replace("\n", "<br>")
 
 
-def _esc_body(text: str) -> str:
-    """답변 본문 전용 이스케이프.
+# 마크다운 변환기 (모듈 1회 생성 후 재사용)
+#  - tables      : | a | b | 표 문법
+#  - nl2br       : 단일 개행을 <br>로 (기존 _esc 동작과 동일하게 유지)
+#  - sane_lists  : 숫자/불릿 목록을 더 예측 가능하게 파싱
+_MD = _md.Markdown(extensions=["tables", "nl2br", "sane_lists"])
 
-    _esc()로 안전하게 이스케이프한 뒤(=태그 주입 방지), 그 '이후에'만
-    **굵게** 패턴을 <strong>으로 바꾼다. escape 이후에 치환하므로
-    사용자/모델이 넣은 진짜 태그가 실행될 위험은 없다.
+
+def _esc_body(text: str) -> str:
+    """답변 본문 전용: HTML 이스케이프 후 마크다운 → HTML 변환.
+
+    순서가 중요하다. 먼저 html.escape로 태그를 무력화하고(주입 방지),
+    그 '이후에' 마크다운을 변환한다. 이스케이프된 <div> 등은 마크다운
+    입장에선 그냥 글자라서 그대로 텍스트로 남는다.
+
+    quote=False인 이유: 따옴표는 요소 '내용'에 들어가므로 이스케이프
+    불필요하고, 안 건드려야 마크다운 파서가 헷갈리지 않는다.
+
+    마지막 lstrip: st.markdown(unsafe_allow_html=True)은 들여쓴 줄을
+    코드블록으로 오인해 HTML 태그를 날것으로 뱉는다. 변환 결과에
+    들여쓰기가 섞여 나올 경우를 대비해 각 줄을 왼쪽 벽에 붙인다.
     """
-    safe = _esc(text)
-    return _BOLD_RE.sub(r"<strong>\1</strong>", safe)
+    safe = html.escape(text or "", quote=False)
+    _MD.reset()                       # 인스턴스 재사용 시 상태 초기화 (필수)
+    out = _MD.convert(safe)
+    return "\n".join(line.lstrip() for line in out.split("\n"))
 
 
 def _no_blank_lines(s: str) -> str:
