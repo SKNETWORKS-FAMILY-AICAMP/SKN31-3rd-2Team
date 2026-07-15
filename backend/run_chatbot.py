@@ -104,7 +104,7 @@ class LangGraphChatbot:
 
     def ask(self, user_query: str, thread_id: str = "default-thread") -> tuple[list[str], str]:
             """유저 질문을 받아 (참조문서_리스트, 최종_답변)을 반환합니다."""
-            config = {"configurable": {"thread_id": thread_id}}
+            config = {"configurable": {"thread_id": thread_id},"recursion_limit": 6}  #도구 최대 2회 호출 제약
             result = self.agent.invoke(
                 {"messages": [("human", user_query)]},
                 config=config,
