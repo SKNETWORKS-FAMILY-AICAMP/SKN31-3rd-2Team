@@ -1,0 +1,63 @@
+# Python 3.12 권장
+#
+# 가상환경 생성
+# python -m venv .venv
+#
+# 활성화
+# .venv\Scripts\activate        # Windows CMD
+# .venv\Scripts\Activate.ps1    # Windows PowerShell
+# source .venv/bin/activate     # Mac/Linux
+#
+# 패키지 설치
+# pip install -r requirements.txt
+
+# ==============================
+# LLM / OpenAI
+# ==============================
+openai
+tiktoken
+
+# ==============================
+# LangChain
+# ==============================
+langchain
+langchain-core
+langchain-openai
+langchain-text-splitters
+langchain-qdrant
+
+# ==============================
+# LangGraph
+# ==============================
+langgraph
+
+# ==============================
+# Graph Database
+# ==============================
+neo4j
+
+# ==============================
+# Vector Database
+# ==============================
+qdrant-client
+
+# ==============================
+# Web UI
+# ==============================
+streamlit
+
+# ==============================
+# PDF Processing
+# ==============================
+pymupdf
+pdfplumber
+
+# ==============================
+# Data Processing
+# ==============================
+pandas
+
+# ==============================
+# Environment
+# ==============================
+python-dotenv
